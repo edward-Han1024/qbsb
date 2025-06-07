@@ -24,7 +24,9 @@ async function getRandomStarredQuestion() {
 
 export default class ClientScienceBowlRoom extends ScienceBowlRoom {
   constructor(name = 'science-bowl') {
+    console.log('ClientScienceBowlRoom: Constructor called');
     super(name);
+    console.log('ClientScienceBowlRoom: Super constructor called');
 
     this.settings = {
       ...this.settings,
@@ -32,17 +34,35 @@ export default class ClientScienceBowlRoom extends ScienceBowlRoom {
     };
 
     this.checkAnswer = api.checkAnswer;
-    this.getRandomQuestions = async (args) => await api.getRandomScienceBowlQuestion({ ...args, subjects: this.query.subjects });
+    this.getRandomQuestions = async (args) => {
+      // Only include subjects in the query
+      const query = { subjects: this.query.subjects };
+      console.log('ClientScienceBowlRoom: Sending query to API:', query);
+      const questions = await api.getRandomScienceBowlQuestion(query);
+      console.log('ClientScienceBowlRoom: Received questions from API:', questions);
+      return questions;
+    };
     this.getRandomStarredQuestion = getRandomStarredQuestion;
     this.getSet = async ({ setName, packetNumbers }) => setName ? await api.getPacketScienceBowlQuestions(setName, packetNumbers[0] ?? 1) : [];
     this.getSetList = api.getSetList;
     this.getNumPackets = api.getNumPackets;
+    console.log('ClientScienceBowlRoom: Constructor completed');
   }
 
   async message(userId, message) {
+    console.log('ClientScienceBowlRoom received message:', message);
     switch (message.type) {
       case 'toggle-ai-mode': return this.toggleAiMode(userId, message);
-      default: super.message(userId, message);
+      case 'start': 
+        console.log('ClientScienceBowlRoom: Handling start message');
+        const startResult = await super.message(userId, message);
+        console.log('ClientScienceBowlRoom: Start message handled, result:', startResult);
+        return startResult;
+      default: 
+        console.log('ClientScienceBowlRoom: Forwarding message to parent class');
+        const defaultResult = await super.message(userId, message);
+        console.log('ClientScienceBowlRoom: Parent class returned:', defaultResult);
+        return defaultResult;
     }
   }
 

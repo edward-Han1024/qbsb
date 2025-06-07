@@ -22,7 +22,7 @@ export default class QuestionRoom extends Room {
     this.setCache = [];
     this.setLength = 24; // length of 2023 PACE NSC
 
-    this.mode = MODE_ENUM.RANDOM;
+    this.mode = 'random questions';
 
     this.localQuestions = {
       tossups: [],
@@ -51,7 +51,8 @@ export default class QuestionRoom extends Room {
     };
   }
 
-  message (userId, message) {
+  message(userId, message) {
+    console.log('QuestionRoom: Received message:', message);
     switch (message.type) {
       case 'set-categories': return this.setCategories(userId, message);
       case 'set-difficulties': return this.setDifficulties(userId, message);
@@ -65,6 +66,9 @@ export default class QuestionRoom extends Room {
       case 'toggle-standard-only': return this.toggleStandardOnly(userId, message);
       case 'toggle-timer': return this.toggleTimer(userId, message);
       case 'upload-local-packet': return this.uploadLocalPacket(userId, message);
+      default:
+        console.log('QuestionRoom: Unknown message type:', message.type);
+        return undefined;
     }
   }
 
@@ -95,66 +99,96 @@ export default class QuestionRoom extends Room {
   }
 
   async advanceQuestion () {
-    this.queryingQuestion = true;
-    let question = null;
+    console.log('QuestionRoom.advanceQuestion called');
+    console.log('Current mode:', this.mode);
+    console.log('Current query:', this.query);
+    console.log('Current category manager state:', {
+      categories: this.categoryManager.categories,
+      percentView: this.categoryManager.percentView
+    });
 
-    switch (this.mode) {
-      case MODE_ENUM.SET_NAME:
-        do {
-          if (this.setCache.length === 0) {
-            this.query.packetNumbers.shift();
-            const packetNumber = this.query.packetNumbers[0];
-            if (packetNumber === undefined) {
-              this.emitMessage({ type: 'end-of-set' });
+    let question = null;
+    this.queryingQuestion = true;
+
+    try {
+      switch (this.mode) {
+        case MODE_ENUM.SET_NAME:
+          console.log('Mode: SET_NAME');
+          do {
+            if (this.setCache.length === 0) {
+              this.query.packetNumbers.shift();
+              const packetNumber = this.query.packetNumbers[0];
+              if (packetNumber === undefined) {
+                this.emitMessage({ type: 'end-of-set' });
+                return null;
+              }
+              this.setCache = await this.getSet({ setName: this.query.setName, packetNumbers: [packetNumber] });
+              this.packetLength = this.setCache.length;
+            }
+
+            question = this.setCache.shift();
+            if (!question?.packet?.number) {
+              this.emitMessage({ type: 'no-questions-found' });
               return null;
             }
-            this.setCache = await this.getSet({ setName: this.query.setName, packetNumbers: [packetNumber] });
-            this.packetLength = this.setCache.length;
+            this.query.packetNumbers = this.query.packetNumbers.filter(packetNumber => packetNumber >= question.packet.number);
+          } while (!this.categoryManager.isValidCategory(question));
+          break;
+        case MODE_ENUM.RANDOM:
+          console.log('Mode: RANDOM');
+          console.log('Current query:', this.query);
+          console.log('Random question cache length:', this.randomQuestionCache?.length);
+          if (this.categoryManager.percentView) {
+            const randomCategory = this.categoryManager.getRandomCategory();
+            console.log('Using random category:', randomCategory);
+            this.randomQuestionCache = await this.getRandomQuestions({ ...this.query, number: 1, categories: [randomCategory], subcategories: [], alternateSubcategories: [] });
+          } else if (this.randomQuestionCache.length === 0) {
+            console.log('Getting new random questions');
+            console.log('Calling getRandomQuestions with query:', { ...this.query, number: 20 });
+            this.randomQuestionCache = await this.getRandomQuestions({ ...this.query, number: 20 });
+            console.log('Received questions from getRandomQuestions:', this.randomQuestionCache);
+          } else {
+            console.log('Using existing questions from cache');
           }
 
-          question = this.setCache.shift();
-          if (!question?.packet?.number) {
+          if (this.randomQuestionCache?.length === 0) {
+            console.log('No questions found in cache');
             this.emitMessage({ type: 'no-questions-found' });
             return null;
           }
-          this.query.packetNumbers = this.query.packetNumbers.filter(packetNumber => packetNumber >= question.packet.number);
-        } while (!this.categoryManager.isValidCategory(question));
-        break;
-      case MODE_ENUM.RANDOM:
-        if (this.categoryManager.percentView) {
-          const randomCategory = this.categoryManager.getRandomCategory();
-          this.randomQuestionCache = await this.getRandomQuestions({ ...this.query, number: 1, categories: [randomCategory], subcategories: [], alternateSubcategories: [] });
-        } else if (this.randomQuestionCache.length === 0) {
-          this.randomQuestionCache = await this.getRandomQuestions({ ...this.query, number: 20 });
-        }
+          question = this.randomQuestionCache.pop();
+          console.log('Selected question from cache:', question);
+          break;
+        case MODE_ENUM.STARRED:
+          console.log('Mode: STARRED');
+          do {
+            question = await this.getRandomStarredQuestion();
+            if (question === null) {
+              this.emitMessage({ type: 'no-questions-found' });
+              return null;
+            }
+          } while (!this.categoryManager.isValidCategory(question));
+          break;
+        case MODE_ENUM.LOCAL:
+          console.log('Mode: LOCAL');
+          do {
+            question = this.getNextLocalQuestion();
+            if (question === null) {
+              this.emitMessage({ type: 'no-questions-found' });
+              return null;
+            }
+          } while (!this.categoryManager.isValidCategory(question));
+          break;
+      }
 
-        if (this.randomQuestionCache?.length === 0) {
-          this.emitMessage({ type: 'no-questions-found' });
-          return null;
-        }
-        question = this.randomQuestionCache.pop();
-        break;
-      case MODE_ENUM.STARRED:
-        do {
-          question = await this.getRandomStarredQuestion();
-          if (question === null) {
-            this.emitMessage({ type: 'no-questions-found' });
-            return null;
-          }
-        } while (!this.categoryManager.isValidCategory(question));
-        break;
-      case MODE_ENUM.LOCAL:
-        do {
-          question = this.getNextLocalQuestion();
-          if (question === null) {
-            this.emitMessage({ type: 'no-questions-found' });
-            return null;
-          }
-        } while (!this.categoryManager.isValidCategory(question));
-        break;
+      console.log('QuestionRoom: Returning question:', question);
+      return question;
+    } catch (error) {
+      console.error('Error in advanceQuestion:', error);
+      throw error;
+    } finally {
+      this.queryingQuestion = false;
     }
-
-    return question;
   }
 
   setDifficulties (userId, { difficulties }) {

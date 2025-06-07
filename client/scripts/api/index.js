@@ -91,10 +91,34 @@ export default class api {
   }
 
   static async getRandomScienceBowlQuestion ({ subjects, competitions, years, isMcq, isTossup, number }) {
+    console.log('API Client: Raw parameters:', { subjects, competitions, years, isMcq, isTossup, number });
     const filteredParams = filterParams({ subjects, competitions, years, isMcq, isTossup, number });
-    return await fetch('/api/science-bowl/random-question?' + new URLSearchParams(filteredParams))
-      .then(response => response.json())
-      .then(response => response.questions);
+    console.log('API Client: Filtered parameters:', filteredParams);
+    const url = '/api/science-bowl/random-question?' + new URLSearchParams(filteredParams);
+    console.log('API Client: Full URL:', url);
+    return await fetch(url)
+      .then(async response => {
+        console.log('API Client: Response status:', response.status);
+        if (!response.ok) {
+          // If 404 or error, return empty array
+          return [];
+        }
+        const data = await response.json();
+        // If API returns {error: ...}, also return empty array
+        if (!data || data.error) {
+          return [];
+        }
+        // If API returns an array, return it
+        if (Array.isArray(data)) {
+          return data;
+        }
+        // If API returns {questions: [...]}, return the array
+        if (data.questions && Array.isArray(data.questions)) {
+          return data.questions;
+        }
+        // If API returns the array directly (current behavior)
+        return data;
+      });
   }
 
   static getSetList () {

@@ -1,39 +1,50 @@
-import getRandomQuestions from '../../../database/science-bowl/get-random-questions.js';
-import { Router } from 'express';
+import express from 'express';
+import { getRandomQuestions } from '../../../database/science-bowl/get-random-questions.js';
 
-const router = Router();
+const router = express.Router();
+
+// Add logging middleware
+router.use((req, res, next) => {
+  console.log('API: Science Bowl Random Question - Request received:', {
+    method: req.method,
+    url: req.originalUrl,
+    query: req.query,
+    params: req.params,
+    body: req.body
+  });
+  next();
+});
 
 router.get('/', async (req, res) => {
-  // Parse array parameters
-  if (req.query.subjects) {
-    req.query.subjects = req.query.subjects.split(',');
-    req.query.subjects = req.query.subjects.length ? req.query.subjects : undefined;
+  try {
+    console.log('API: Science Bowl Random Question - Processing request with query:', req.query);
+    
+    const subjects = req.query.subjects ? req.query.subjects.split(',') : [];
+    console.log('API: Science Bowl Random Question - Parsed subjects:', subjects);
+    
+    const query = {
+      subjects,
+      competitions: req.query.competitions ? req.query.competitions.split(',') : [],
+      years: req.query.years ? req.query.years.split(',').map(Number) : [],
+      isMcq: req.query.isMcq === 'true',
+      isTossup: req.query.isTossup === 'true',
+      number: parseInt(req.query.number) || 1
+    };
+    
+    console.log('API: Science Bowl Random Question - Final query object:', query);
+    
+    const questions = await getRandomQuestions(query);
+    console.log('API: Science Bowl Random Question - Found questions:', questions.length);
+    
+    if (questions.length === 0) {
+      return res.status(404).json({ error: 'No questions found' });
+    }
+    
+    res.json(questions);
+  } catch (error) {
+    console.error('API: Science Bowl Random Question - Error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
-
-  if (req.query.competitions) {
-    req.query.competitions = req.query.competitions.split(',');
-    req.query.competitions = req.query.competitions.length ? req.query.competitions : undefined;
-  }
-
-  if (req.query.years) {
-    req.query.years = req.query.years.split(',');
-    req.query.years = req.query.years.length ? req.query.years : undefined;
-  }
-
-  // Parse numeric parameters
-  req.query.number = isNaN(req.query.number) ? undefined : parseInt(req.query.number);
-
-  // Parse boolean parameters
-  req.query.isMcq = (req.query.isMcq === 'true');
-  req.query.isTossup = (req.query.isTossup === 'true');
-
-  const questions = await getRandomQuestions(req.query);
-
-  if (questions.length === 0) {
-    res.status(404);
-  }
-
-  res.json({ questions });
 });
 
 export default router; 

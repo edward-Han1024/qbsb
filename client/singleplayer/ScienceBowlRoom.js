@@ -27,7 +27,7 @@ export default class ScienceBowlRoom extends QuestionRoom {
       caseSensitive: false
     };
 
-    this.mode = 'random';
+    this.mode = 'random questions';
     this.previous = {
       celerity: 0,
       endOfQuestion: false,
@@ -44,7 +44,11 @@ export default class ScienceBowlRoom extends QuestionRoom {
   }
 
   async message(userId, message) {
+    console.log('ScienceBowlRoom: Received message:', message);
     switch (message.type) {
+      case 'start':
+        console.log('ScienceBowlRoom: Handling start message');
+        return this.next();
       case 'toggle-show-history': return this.toggleShowHistory(userId, message);
       case 'toggle-timer': return this.toggleTimer(userId, message);
       case 'toggle-type-to-answer': return this.toggleTypeToAnswer(userId, message);
@@ -52,8 +56,26 @@ export default class ScienceBowlRoom extends QuestionRoom {
       case 'set-strictness': return this.setStrictness(userId, message);
       case 'set-reading-speed': return this.setReadingSpeed(userId, message);
       case 'set-subjects': return this.setSubjects(userId, message);
-      default: super.message(userId, message);
+      default:
+        console.log('ScienceBowlRoom: Forwarding to parent class');
+        return super.message(userId, message);
     }
+  }
+
+  async next() {
+    console.log('ScienceBowlRoom: next() called');
+    const question = await this.advanceQuestion();
+    console.log('ScienceBowlRoom: advanceQuestion returned:', question);
+    
+    if (question === null) {
+      console.log('ScienceBowlRoom: No question found');
+      this.emitMessage({ type: 'no-questions-found' });
+      return;
+    }
+
+    console.log('ScienceBowlRoom: Emitting question:', question);
+    this.emitMessage({ type: 'question', question });
+    return question;
   }
 
   toggleShowHistory(userId, { showHistory }) {

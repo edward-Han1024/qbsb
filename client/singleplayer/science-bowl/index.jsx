@@ -36,6 +36,7 @@ const savedCategoryState = JSON.parse(window.localStorage.getItem('singleplayer-
 console.log('Loading saved category state:', savedCategoryState);
 if (savedCategoryState.version === queryVersion) {
   room.categoryManager.import(savedCategoryState);
+  room.query.subjects = room.categoryManager.categories;
   // Update checkbox states immediately after loading saved state
   console.log('Updating checkbox states after loading saved state');
   document.querySelectorAll('.category-checkbox').forEach(checkbox => {
@@ -377,6 +378,7 @@ document.addEventListener('DOMContentLoaded', () => {
   console.log('Loading saved category state:', savedCategoryState);
   if (savedCategoryState.version === queryVersion) {
     room.categoryManager.import(savedCategoryState);
+    room.query.subjects = room.categoryManager.categories;
     // Update checkbox states immediately after loading saved state
     console.log('Updating checkbox states after loading saved state');
     document.querySelectorAll('.category-checkbox').forEach(checkbox => {
@@ -461,9 +463,26 @@ document.addEventListener('DOMContentLoaded', () => {
     room.message(USER_ID, { type: 'pause' });
   });
 
-  document.getElementById('start').addEventListener('click', () => {
-    room.message(USER_ID, { type: 'start' });
-  });
+  // Add start button handler with detailed logging
+  const startButton = document.getElementById('start');
+  console.log('Found start button:', startButton);
+  if (startButton) {
+    startButton.addEventListener('click', () => {
+      console.log('Start button clicked');
+      console.log('Current room state:', {
+        categories: room.categoryManager.categories,
+        query: room.query,
+        mode: room.mode
+      });
+      // Ensure categories are synced before starting
+      room.query.subjects = room.categoryManager.categories;
+      console.log('Starting with categories:', room.categoryManager.categories);
+      room.message(USER_ID, { type: 'start' });
+    });
+    console.log('Start button handler attached');
+  } else {
+    console.error('Start button not found!');
+  }
 
   document.getElementById('toggle-correct').addEventListener('click', () => {
     room.message(USER_ID, { type: 'toggle-correct' });

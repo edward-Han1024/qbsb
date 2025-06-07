@@ -1,4 +1,4 @@
-import { questions } from './collections.js';
+import { scienceBowl } from '../databases.js';
 import { SBCATEGORIES } from '../../quizbowl/categories.js';
 
 /**
@@ -12,40 +12,67 @@ import { SBCATEGORIES } from '../../quizbowl/categories.js';
  * @param {number} [object.number=1] - how many random questions to return. Default: 1.
  * @returns {Promise<Array>} Array of random questions
  */
-async function getRandomQuestions({
-  subjects = SBCATEGORIES,
-  competitions = [],
-  years = [],
-  isMcq,
-  isTossup,
-  number = 1
-} = {}) {
-  const aggregation = [
-    { $match: {} },
-    { $sample: { size: number } }
+export async function getRandomQuestions(query) {
+  console.log('getRandomQuestions: Received query:', query);
+  
+  // First, let's check what data we actually have
+  const allQuestions = await scienceBowl.collection('questions').find({}).toArray();
+  console.log('getRandomQuestions: Sample of questions in database:', allQuestions.slice(0, 2));
+  console.log('getRandomQuestions: Total questions in database:', allQuestions.length);
+  
+  const { subjects, competitions, years, isMcq, isTossup, number } = query;
+  console.log('getRandomQuestions: Parsed parameters:', { subjects, competitions, years, isMcq, isTossup, number });
+
+  const matchStage = {};
+  
+  if (subjects && subjects.length > 0) {
+    matchStage.subject = { $in: subjects };
+  }
+  
+  if (competitions && competitions.length > 0) {
+    matchStage.competition = { $in: competitions };
+  }
+  
+  if (years && years.length > 0) {
+    matchStage.year = { $in: years };
+  }
+  
+  if (isMcq !== undefined) {
+    matchStage.is_mcq = isMcq;
+  }
+  
+  if (isTossup !== undefined) {
+    matchStage.is_tossup = isTossup;
+  }
+
+  console.log('getRandomQuestions: Final match stage:', JSON.stringify(matchStage, null, 2));
+
+  const pipeline = [
+    { $match: matchStage },
+    { $sample: { size: number || 1 } }
   ];
 
-  if (subjects?.length) {
-    aggregation[0].$match.subject = { $in: subjects };
-  }
+  console.log('getRandomQuestions: Full aggregation pipeline:', JSON.stringify(pipeline, null, 2));
 
-  if (competitions?.length) {
-    aggregation[0].$match.competition = { $in: competitions };
+  try {
+    const questions = await scienceBowl.collection('questions').aggregate(pipeline).toArray();
+    console.log('getRandomQuestions: Found questions:', questions.length);
+    if (questions.length === 0) {
+      console.log('getRandomQuestions: No questions found with the given criteria');
+      // Let's check what questions we have for these subjects
+      const subjectQuestions = await scienceBowl.collection('questions')
+        .find({ subject: { $in: subjects } })
+        .toArray();
+      console.log('getRandomQuestions: Questions found for subjects (without other filters):', subjectQuestions.length);
+      if (subjectQuestions.length > 0) {
+        console.log('getRandomQuestions: Sample of questions for these subjects:', subjectQuestions.slice(0, 2));
+      }
+    }
+    return questions;
+  } catch (error) {
+    console.error('getRandomQuestions: Error executing query:', error);
+    throw error;
   }
-
-  if (years?.length) {
-    aggregation[0].$match.year = { $in: years };
-  }
-
-  if (typeof isMcq === 'boolean') {
-    aggregation[0].$match.is_mcq = isMcq;
-  }
-
-  if (typeof isTossup === 'boolean') {
-    aggregation[0].$match.isTossup = isTossup;
-  }
-
-  return await questions.aggregate(aggregation).toArray();
 }
 
 export default getRandomQuestions; 

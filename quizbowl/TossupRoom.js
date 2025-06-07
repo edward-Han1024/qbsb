@@ -154,9 +154,19 @@ export default class TossupRoom extends QuestionRoom {
    * @returns
    */
   async next (userId, { type }) {
-    if (this.buzzedIn) { return false; } // prevents skipping when someone has buzzed in
-    if (this.queryingQuestion) { return false; }
-    if (this.tossupProgress === TOSSUP_PROGRESS_ENUM.READING && !this.settings.skip) { return false; }
+    console.log('TossupRoom.next called with type:', type);
+    if (this.buzzedIn) { 
+      console.log('Cannot advance - someone has buzzed in');
+      return false; 
+    }
+    if (this.queryingQuestion) { 
+      console.log('Cannot advance - already querying question');
+      return false; 
+    }
+    if (this.tossupProgress === TOSSUP_PROGRESS_ENUM.READING && !this.settings.skip) { 
+      console.log('Cannot advance - question is reading and skip is disabled');
+      return false; 
+    }
 
     const username = this.players[userId].username;
 
@@ -172,9 +182,12 @@ export default class TossupRoom extends QuestionRoom {
     if (this.tossupProgress !== TOSSUP_PROGRESS_ENUM.ANSWER_REVEALED) { this.revealQuestion(); }
 
     const oldTossup = this.tossup;
+    console.log('Advancing to next question...');
     this.tossup = await this.advanceQuestion();
+    console.log('Got next question:', this.tossup);
     this.queryingQuestion = false;
     if (!this.tossup) {
+      console.log('No more questions available');
       this.emitMessage({ type: 'end', oldTossup, userId, username });
       return false;
     }

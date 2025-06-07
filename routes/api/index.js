@@ -23,6 +23,13 @@ import rateLimit from 'express-rate-limit';
 
 const router = Router();
 
+// Add logging middleware
+router.use((req, res, next) => {
+  console.log('API Router: Received request for', req.method, req.originalUrl);
+  console.log('API Router: Query parameters:', req.query);
+  next();
+});
+
 // Apply the rate limiting middleware to API calls only
 router.use(rateLimit({
   windowMs: 1000, // 4 seconds
