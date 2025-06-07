@@ -138,6 +138,10 @@
                         <input class="form-check-input" id="toggle-timer" type="checkbox" role="switch" checked>
                         <label class="form-check-label" for="toggle-timer">Enable timer</label>
                     </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" id="toggle-speech" type="checkbox" role="switch">
+                        <label class="form-check-label" for="toggle-speech">Enable text-to-speech</label>
+                    </div>
                     <div class="mb-2"></div>
                     <label for="reading-speed">Reading speed: <span id="reading-speed-display">50</span><br></label>
                     <input class="form-range" id="reading-speed" type="range" min="0" max="100" step="5">
@@ -417,6 +421,88 @@
             if (e.key === 'p') {
                 console.log('Pause key pressed');
                 handlePause();
+            }
+        });
+
+        // Text-to-speech functionality
+        let speechSynthesis = window.speechSynthesis;
+        let speechEnabled = false;
+        let currentUtterance = null;
+
+        // Wait for room to be initialized
+        function initializeSpeechSynthesis() {
+            if (!window.room) {
+                console.log('Room not initialized yet, retrying in 500ms...');
+                setTimeout(initializeSpeechSynthesis, 500);
+                return;
+            }
+
+            console.log('Room initialized, setting up speech synthesis...');
+            
+            // Store the original readQuestion method
+            const originalReadQuestion = window.room.readQuestion;
+            
+            // Override the readQuestion method
+            window.room.readQuestion = function(timestamp) {
+                // Call the original method first
+                originalReadQuestion.call(this, timestamp);
+                
+                // Then handle speech synthesis
+                if (speechEnabled && this.questionSplit) {
+                    console.log('Speaking word:', this.questionSplit[this.wordIndex]);
+                    
+                    // Cancel any ongoing speech
+                    if (currentUtterance) {
+                        speechSynthesis.cancel();
+                    }
+
+                    // Create new utterance for the current word
+                    const currentWord = this.questionSplit[this.wordIndex];
+                    if (currentWord) {
+                        currentUtterance = new SpeechSynthesisUtterance(currentWord);
+                        currentUtterance.rate = 1.0; // Adjust speaking rate if needed
+                        speechSynthesis.speak(currentUtterance);
+                    }
+                }
+            };
+
+            // Store the original message method
+            const originalMessage = window.room.message;
+            
+            // Override the message method
+            window.room.message = function(type, data) {
+                // Call the original method first
+                originalMessage.call(this, type, data);
+                
+                // Then handle speech synthesis pause/resume
+                if (type === 'user' && data.type === 'pause') {
+                    if (speechEnabled) {
+                        if (speechSynthesis.speaking) {
+                            console.log('Pausing speech synthesis');
+                            speechSynthesis.pause();
+                        } else {
+                            console.log('Resuming speech synthesis');
+                            speechSynthesis.resume();
+                        }
+                    }
+                }
+            };
+        }
+
+        // Initialize speech synthesis when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM loaded, initializing speech synthesis...');
+            initializeSpeechSynthesis();
+        });
+
+        // Handle speech toggle
+        document.getElementById('toggle-speech').addEventListener('change', function(e) {
+            console.log('Speech toggle changed:', e.target.checked);
+            speechEnabled = e.target.checked;
+            if (!speechEnabled && currentUtterance) {
+                console.log('Disabling speech synthesis');
+                speechSynthesis.cancel();
+                currentUtterance = null;
             }
         });
     </script>
