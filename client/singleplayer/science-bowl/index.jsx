@@ -67,6 +67,7 @@ function onmessage (message) {
     case 'no-questions-found': return noQuestionsFound(data);
     case 'pause': return pause(data);
     case 'reveal-answer': return revealAnswer(data);
+    case 'reset-question': return document.getElementById('question').textContent = '';
     case 'set-categories': return setCategories(data);
     case 'set-difficulties': return setDifficulties(data);
     case 'set-mode': return setMode(data);
@@ -129,7 +130,11 @@ async function giveAnswer ({ directive, directedPrompt, perQuestionCelerity, sco
   document.getElementById('answer-input').blur();
   document.getElementById('answer-input').placeholder = 'Enter answer';
   document.getElementById('answer-input-group').classList.add('d-none');
-  document.getElementById('next').disabled = false;
+  
+  // Enable next button and update its text
+  const nextButton = document.getElementById('next');
+  nextButton.disabled = false;
+  nextButton.textContent = 'Next';
 
   if (room.settings.rebuzz && directive === 'reject') {
     document.getElementById('buzz').disabled = false;
@@ -174,6 +179,7 @@ async function next ({ packetLength, oldTossup, tossup: nextTossup, type }) {
     document.getElementById('buzz').textContent = 'Buzz';
     document.getElementById('buzz').disabled = false;
     document.getElementById('next').textContent = 'Skip';
+    document.getElementById('next').disabled = false;
     document.getElementById('packet-number-info').textContent = nextTossup.packet.number;
     document.getElementById('packet-length-info').textContent = room.mode === MODE_ENUM.SET_NAME ? packetLength : '-';
     document.getElementById('pause').textContent = 'Pause';
@@ -199,8 +205,26 @@ function noQuestionsFound () {
 }
 
 function pause ({ paused }) {
+  console.log('Pause function called with paused:', paused);
+  console.log('Current room state:', {
+    tossupProgress: room.tossupProgress,
+    wordIndex: room.wordIndex,
+    questionSplit: room.questionSplit?.length
+  });
+  
   document.getElementById('buzz').disabled = paused;
   document.getElementById('pause').textContent = paused ? 'Resume' : 'Pause';
+  
+  // If we're resuming, we need to restart the question reading
+  if (!paused && room.tossupProgress === 'READING') {
+    console.log('Resuming question reading');
+    room.readQuestion(Date.now());
+  } else {
+    console.log('Not resuming question reading:', {
+      paused,
+      tossupProgress: room.tossupProgress
+    });
+  }
 }
 
 function revealAnswer ({ answer, question }) {
@@ -347,12 +371,18 @@ function updateTimerDisplay (time) {
 document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM loaded, setting up event handlers');
   
-  // Initialize room
-  console.log('Initializing room...');
-  const room = new ClientScienceBowlRoom();
-  console.log('Room initialized:', room);
+  // Use the global room instance instead of creating a new one
+  console.log('Using global room instance:', window.room);
+  const room = window.room;
   console.log('Category manager:', room.categoryManager);
   console.log('Initial categories:', room.categoryManager.categories);
+  
+  // Initialize button states
+  document.getElementById('start').disabled = false;
+  document.getElementById('start').textContent = 'Start/Next';
+  document.getElementById('buzz').disabled = true;
+  document.getElementById('pause').disabled = false;
+  document.getElementById('pause').textContent = 'Pause';
   
   // Load saved settings
   const savedSettings = localStorage.getItem('singleplayer-science-bowl-settings');
@@ -455,20 +485,12 @@ document.addEventListener('DOMContentLoaded', () => {
     room.message(USER_ID, { type: 'clear-stats' });
   });
 
-  document.getElementById('next').addEventListener('click', () => {
-    room.message(USER_ID, { type: 'next' });
-  });
-
-  document.getElementById('pause').addEventListener('click', () => {
-    room.message(USER_ID, { type: 'pause' });
-  });
-
   // Add start button handler with detailed logging
   const startButton = document.getElementById('start');
   console.log('Found start button:', startButton);
   if (startButton) {
     startButton.addEventListener('click', () => {
-      console.log('Start button clicked');
+      console.log('Start/Next button clicked');
       console.log('Current room state:', {
         categories: room.categoryManager.categories,
         query: room.query,
@@ -516,12 +538,18 @@ document.addEventListener('DOMContentLoaded', () => {
     room.message(USER_ID, { type: 'set-reading-speed', readingSpeed: parseInt(e.target.value) });
   });
 
+  // Add pause button handler
+  document.getElementById('pause').addEventListener('click', () => {
+    console.log('Pause button clicked');
+    room.message(USER_ID, { type: 'pause' });
+  });
+
   // Set up keyboard shortcuts
   document.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT') { return; }
     switch (e.key) {
       case ' ': return room.message(USER_ID, { type: 'buzz' });
-      case 'n': return room.message(USER_ID, { type: 'next' });
+      case 'n': return room.message(USER_ID, { type: 'start' });
       case 'p': return room.message(USER_ID, { type: 'pause' });
       case 's': return room.message(USER_ID, { type: 'start' });
     }
