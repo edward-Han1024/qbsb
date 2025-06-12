@@ -117,6 +117,7 @@ export default class ScienceBowlRoom extends QuestionRoom {
     this.tossupProgress = 'READING';
 
     console.log('ScienceBowlRoom: Emitting question:', question);
+    this.tossup = question;
     this.emitMessage({ type: 'question', question });
     
     // Start reading the question
@@ -283,7 +284,8 @@ export default class ScienceBowlRoom extends QuestionRoom {
     this.emitMessage({
       type: 'reveal-answer',
       question: this.questionSplit.join(' '),
-      answer: givenAnswer
+      answer: givenAnswer,
+      correctAnswer: this.tossup?.answer
     });
 
     return true;

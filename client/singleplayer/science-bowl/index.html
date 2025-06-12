@@ -163,25 +163,25 @@
             <div class="col-12 col-lg-9" id="content">
                 <form id="answer-form">
                     <!-- User enters answer here -->
-                    <div class="input-group d-none my-2" id="answer-input-group">
+                    <div class="d-flex justify-content-between mb-3">
+                        <span id="statline">0/0/0 with 0 tossups seen (0 pts, celerity: 0)</span>
+                        <span class="ps-5 me-lg-2" id="question-metadata">
+                            <b id="question-info">
+                                <span id="set-name-info"></span>
+                                Packet <span id="packet-number-info">-</span>
+                                Question <span id="question-number-info">-</span>
+                                of <span id="packet-length-info">-</span>
+                            </b>
+                        </span>
+                    </div>
+                    <div id="question" class="mb-3"></div>
+                    <div id="answer-display" class="mb-3"></div>
+                    <div id="user-answer" class="mb-3"></div>
+                    <div id="answer-input-group" class="input-group mb-3 d-none">
                         <input class="form-control" id="answer-input" type="text" placeholder="Enter answer" autocomplete="off">
                         <button class="btn btn-success" id="answer-submit" type="submit">Submit</button>
                     </div>
                 </form>
-                <div class="d-flex justify-content-between">
-                    <span id="statline">0/0/0 with 0 tossups seen (0 pts, celerity: 0)</span>
-                    <span class="ps-5 me-lg-2" id="question-metadata">
-                        <b id="question-info">
-                            <span id="set-name-info"></span>
-                            Packet <span id="packet-number-info">-</span>
-                            Question <span id="question-number-info">-</span>
-                            of <span id="packet-length-info">-</span>
-                        </b>
-                    </span>
-                </div>
-                <div class="mt-2" id="question"></div>
-                <a class="mt-1 mt-lg-3 p-0 btn btn-link float-end d-none" id="toggle-correct">I was wrong</a>
-                <p class="mt-1 mt-lg-3" id="answer"></p>
                 <ul class="room-history list-unstyled" id="room-history"></ul>
             </div>
         </div>
@@ -400,7 +400,9 @@
     <script type="module" src="/bootstrap/bootstrap.bundle.min.js"></script>
     <script type="module" src="/script.js"></script>
     <script type="module" src="index.min.js"></script>
-    <script>
+    <script type="module">
+        import { validateAnswer, formatValidationResult } from './answer-validator.js';
+        
         // Handle buzz and answer submission
         document.getElementById('buzz').addEventListener('click', function() {
             console.log('Buzz button clicked');
@@ -409,7 +411,7 @@
                 return;
             }
             
-            // Stop any ongoing speech synthesis
+            // Stop any ongoing speech
             if (speechSynthesis.speaking) {
                 console.log('Stopping speech synthesis on buzz');
                 speechSynthesis.cancel();
@@ -512,41 +514,55 @@
                 console.error('Room not initialized');
                 return;
             }
+
+            // Debug logging
+            console.log('Room state:', {
+                question: window.room.question,
+                previous: window.room.previous,
+                tossup: window.room.tossup,
+                currentQuestion: window.room.currentQuestion,
+                questionSplit: window.room.questionSplit,
+                randomQuestionCache: window.room.randomQuestionCache
+            });
             
-            // Update UI first
-            const questionElement = document.getElementById('question');
-            const answerElement = document.getElementById('answer');
-            const pauseButton = document.getElementById('pause');
-            const buzzButton = document.getElementById('buzz');
-            const nextButton = document.getElementById('next');
-            const startButton = document.getElementById('start');
-            const toggleCorrectButton = document.getElementById('toggle-correct');
+            // Get the current question's correct answer
+            const correctAnswer = window.room.tossup?.answer;
+            console.log('Attempting to get correct answer:', {
+                correctAnswer,
+                tossup: window.room.tossup
+            });
+
+            if (!correctAnswer) {
+                console.error('No correct answer available for current question');
+                return;
+            }
             
-            if (questionElement && answerElement) {
-                questionElement.innerHTML = window.room.questionSplit.join(' ');
-                answerElement.innerHTML = 'ANSWER: ' + answer;
-            }
-            if (pauseButton) pauseButton.disabled = true;
-            if (buzzButton) {
-                buzzButton.disabled = true;
-                buzzButton.textContent = 'Buzz';
-            }
-            if (nextButton) {
-                nextButton.disabled = false;
-                nextButton.textContent = 'Next';
-            }
-            if (startButton) startButton.disabled = false;
-            if (toggleCorrectButton) {
-                toggleCorrectButton.classList.remove('d-none');
-                toggleCorrectButton.textContent = 'I was wrong';
-            }
+            // Get the current strictness setting
+            const strictness = parseInt(document.getElementById('set-strictness').value) || 7;
+            
+            // Validate the answer
+            const validationResult = validateAnswer(answer, correctAnswer, strictness);
+            console.log('Answer validation result:', validationResult);
+            
+            // Call revealAnswer with the necessary data
+            revealAnswer({
+                type: 'reveal-answer',
+                question: window.room.questionSplit.join(' '),
+                answer: answer,
+                correctAnswer: correctAnswer
+            });
             
             // Clear and hide input
             document.getElementById('answer-input').value = '';
             document.getElementById('answer-input-group').classList.add('d-none');
             
-            // Send answer to room
-            window.room.message('user', { type: 'give-answer', givenAnswer: answer });
+            // Send answer to room with validation result
+            window.room.message('user', { 
+                type: 'give-answer', 
+                givenAnswer: answer,
+                isCorrect: validationResult.isCorrect,
+                matchType: validationResult.matchType
+            });
         });
 
         // Initialize room state
@@ -563,37 +579,17 @@
             window.room.emitMessage = function(message) {
                 console.log('Room emitting message:', message);
                 
+                // Store the question object when it's emitted
+                if (message.type === 'question') {
+                    console.log('Storing question object:', message.question);
+                    this.tossup = message.question;
+                    window.room.tossup = message.question;
+                }
+                
                 // Handle reveal-answer message before calling original method
                 if (message.type === 'reveal-answer') {
-                    console.log('Handling reveal-answer message');
-                    const questionElement = document.getElementById('question');
-                    const answerElement = document.getElementById('answer');
-                    const pauseButton = document.getElementById('pause');
-                    const buzzButton = document.getElementById('buzz');
-                    const nextButton = document.getElementById('next');
-                    const startButton = document.getElementById('start');
-                    const toggleCorrectButton = document.getElementById('toggle-correct');
-                    
-                    if (questionElement && answerElement) {
-                        questionElement.innerHTML = message.question;
-                        answerElement.innerHTML = 'ANSWER: ' + message.answer;
-                    }
-                    if (pauseButton) pauseButton.disabled = true;
-                    if (buzzButton) {
-                        buzzButton.disabled = true;
-                        buzzButton.textContent = 'Buzz';
-                    }
-                    if (nextButton) {
-                        nextButton.disabled = false;
-                        nextButton.textContent = 'Next';
-                    }
-                    if (startButton) startButton.disabled = false;
-                    if (toggleCorrectButton) {
-                        toggleCorrectButton.classList.remove('d-none');
-                        toggleCorrectButton.textContent = this.previous.isCorrect ? 'I was wrong' : 'I was right';
-                    }
-                    
-                    // Don't call original method for reveal-answer
+                    console.log('Handling reveal-answer message:', message);
+                    revealAnswer(message);
                     return;
                 }
                 
@@ -753,6 +749,50 @@
                 stopCurrentSpeech();
             }
         });
+
+        function revealAnswer (message) {
+            console.log('revealAnswer called with message:', message);
+            const { answer, question, correctAnswer } = message;
+            console.log('Destructured values:', { answer, question, correctAnswer });
+            
+            const questionElement = document.getElementById('question');
+            const answerElement = document.getElementById('answer-display');
+            const userAnswerElement = document.getElementById('user-answer');
+            const pauseButton = document.getElementById('pause');
+            const buzzButton = document.getElementById('buzz');
+            const nextButton = document.getElementById('next');
+            const startButton = document.getElementById('start');
+            const toggleCorrectButton = document.getElementById('toggle-correct');
+            
+            if (questionElement && answerElement) {
+                console.log('Setting question and answer elements');
+                questionElement.innerHTML = question;
+                // Use the correct answer from the tossup if available
+                const finalCorrectAnswer = correctAnswer || (window.room?.tossup?.answer);
+                console.log('Using correct answer:', finalCorrectAnswer);
+                answerElement.innerHTML = 'ANSWER: ' + finalCorrectAnswer;
+                if (userAnswerElement) {
+                    userAnswerElement.innerHTML = 'YOUR ANSWER: ' + answer;
+                }
+            } else {
+                console.log('Question or answer element not found:', { questionElement, answerElement });
+            }
+            
+            if (pauseButton) pauseButton.disabled = true;
+            if (buzzButton) {
+                buzzButton.disabled = true;
+                buzzButton.textContent = 'Buzz';
+            }
+            if (nextButton) {
+                nextButton.disabled = false;
+                nextButton.textContent = 'Next';
+            }
+            if (startButton) startButton.disabled = false;
+            if (toggleCorrectButton) {
+                toggleCorrectButton.classList.remove('d-none');
+                toggleCorrectButton.textContent = room.previous.isCorrect ? 'I was wrong' : 'I was right';
+            }
+        }
     </script>
 </body>
 
