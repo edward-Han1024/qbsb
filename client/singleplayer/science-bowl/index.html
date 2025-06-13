@@ -164,7 +164,7 @@
                 <form id="answer-form">
                     <!-- User enters answer here -->
                     <div class="d-flex justify-content-between mb-3">
-                        <span id="statline">0/0/0 with 0 tossups seen (0 pts, celerity: 0)</span>
+                        <span id="statline">SCORE: 0</span>
                         <span class="ps-5 me-lg-2" id="question-metadata">
                             <b id="question-info">
                                 <span id="set-name-info"></span>
@@ -190,7 +190,7 @@
     <div class="container-fluid py-3 px-xxl-5 position-fixed bottom-0 bg-body">
         <div class="row">
             <div class="col-12 col-lg-9" id="buttons">
-                <button class="btn btn-primary" id="start" onclick="console.log('Start button clicked. Current categories:', window.room.categoryManager.categories); console.log('Current query:', window.room.query); window.room.query.subjects = window.room.categoryManager.categories; console.log('Starting with categories:', window.room.categoryManager.categories); window.room.message('user', { type: 'start' });">Start/Next</button>
+                <button class="btn btn-primary" id="start" onclick="console.log('Start button clicked. Current categories:', window.room.categoryManager.categories); console.log('Current query:', window.room.query); window.room.query.subjects = window.room.categoryManager.categories; console.log('Starting with categories:', window.room.categoryManager.categories); document.getElementById('answer-display').textContent = ''; document.getElementById('user-answer').textContent = ''; window.room.message('user', { type: 'start' });">Start/Next</button>
                 <button class="btn btn-primary" id="pause" data-bs-placement="top" data-bs-toggle="tooltip" type="button"
                     title="Shortcut: p key" onclick="handlePause()">Pause</button>
                 <button class="btn btn-danger" id="toggle-settings" data-bs-placement="top" data-bs-toggle="tooltip" type="button"
@@ -400,6 +400,46 @@
     <script type="module" src="/bootstrap/bootstrap.bundle.min.js"></script>
     <script type="module" src="/script.js"></script>
     <script type="module" src="index.min.js"></script>
+    <script>
+        // Initialize updateStatDisplay if not already defined
+        if (typeof window.updateStatDisplay !== 'function') {
+            window.updateStatDisplay = function() {
+                const statline = document.getElementById('statline');
+                const currentScore = parseInt(statline.textContent.split(': ')[1]) || 0;
+                const newScore = currentScore + 4;
+                statline.textContent = `SCORE: ${newScore}`;
+            };
+        }
+
+        // Global function for pause button
+        function handlePause() {
+            console.log('Pause button clicked');
+            if (!window.room) {
+                console.error('Room not initialized');
+                return;
+            }
+            
+            const buzzButton = document.getElementById('buzz');
+            const pauseButton = document.getElementById('pause');
+            
+            // Toggle pause state
+            const isPaused = pauseButton.textContent === 'Resume';
+            
+            if (isPaused) {
+                // Resuming - enable buzz button if we're in reading state
+                if (window.room.tossupProgress === 'READING') {
+                    buzzButton.disabled = false;
+                }
+                pauseButton.textContent = 'Pause';
+            } else {
+                // Pausing - disable buzz button
+                buzzButton.disabled = true;
+                pauseButton.textContent = 'Resume';
+            }
+            
+            window.room.message('user', { type: 'pause' });
+        }
+    </script>
     <script type="module">
         import { validateAnswer, formatValidationResult } from './answer-validator.js';
         
@@ -443,6 +483,9 @@
             const answerInput = document.getElementById('answer-input');
             const answerInputGroup = document.getElementById('answer-input-group');
             const toggleCorrectButton = document.getElementById('toggle-correct');
+            const answerDisplay = document.getElementById('answer-display');
+            const userAnswer = document.getElementById('user-answer');
+            const answer = document.getElementById('answer');
             
             // Enable/disable appropriate buttons
             buzzButton.disabled = false;
@@ -454,8 +497,11 @@
             answerInput.value = '';
             answerInputGroup.classList.add('d-none');
             
-            // Hide toggle correct button
+            // Hide toggle correct button and clear answer displays
             toggleCorrectButton.classList.add('d-none');
+            if (answerDisplay) answerDisplay.innerHTML = '';
+            if (userAnswer) userAnswer.innerHTML = '';
+            if (answer) answer.innerHTML = '';
             
             // Ensure categories are synced
             window.room.query.subjects = window.room.categoryManager.categories;
@@ -464,34 +510,6 @@
             // Start new question
             window.room.message('user', { type: 'start' });
         });
-
-        function handlePause() {
-            console.log('Pause button clicked');
-            if (!window.room) {
-                console.error('Room not initialized');
-                return;
-            }
-            
-            const buzzButton = document.getElementById('buzz');
-            const pauseButton = document.getElementById('pause');
-            
-            // Toggle pause state
-            const isPaused = pauseButton.textContent === 'Resume';
-            
-            if (isPaused) {
-                // Resuming - enable buzz button if we're in reading state
-                if (window.room.tossupProgress === 'READING') {
-                    buzzButton.disabled = false;
-                }
-                pauseButton.textContent = 'Pause';
-            } else {
-                // Pausing - disable buzz button
-                buzzButton.disabled = true;
-                pauseButton.textContent = 'Resume';
-            }
-            
-            window.room.message('user', { type: 'pause' });
-        }
 
         // Add keyboard shortcut for pause
         document.addEventListener('keydown', (e) => {
@@ -515,16 +533,6 @@
                 return;
             }
 
-            // Debug logging
-            console.log('Room state:', {
-                question: window.room.question,
-                previous: window.room.previous,
-                tossup: window.room.tossup,
-                currentQuestion: window.room.currentQuestion,
-                questionSplit: window.room.questionSplit,
-                randomQuestionCache: window.room.randomQuestionCache
-            });
-            
             // Get the current question's correct answer
             const correctAnswer = window.room.tossup?.answer;
             console.log('Attempting to get correct answer:', {
@@ -543,6 +551,11 @@
             // Validate the answer
             const validationResult = validateAnswer(answer, correctAnswer, strictness);
             console.log('Answer validation result:', validationResult);
+            
+            // If answer is correct, update the score
+            if (validationResult.isCorrect) {
+                updateStatDisplay();
+            }
             
             // Call revealAnswer with the necessary data
             revealAnswer({
@@ -755,8 +768,9 @@
             const { answer, question, correctAnswer } = message;
             console.log('Destructured values:', { answer, question, correctAnswer });
             
+            // Try both old and new element IDs
             const questionElement = document.getElementById('question');
-            const answerElement = document.getElementById('answer-display');
+            const answerElement = document.getElementById('answer-display') || document.getElementById('answer');
             const userAnswerElement = document.getElementById('user-answer');
             const pauseButton = document.getElementById('pause');
             const buzzButton = document.getElementById('buzz');

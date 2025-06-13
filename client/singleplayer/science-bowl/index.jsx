@@ -121,7 +121,7 @@ async function giveAnswer ({ directive, directedPrompt, perQuestionCelerity, sco
   }
 
   if (userId === USER_ID) {
-    updateStatDisplay(room.players[USER_ID]);
+    updateStatDisplay({ ...room.players[USER_ID], directive });
   } else if (aiBot.active) {
     upsertPlayerItem(aiBot.player);
   }
@@ -154,28 +154,66 @@ async function giveAnswer ({ directive, directedPrompt, perQuestionCelerity, sco
 }
 
 async function next ({ packetLength, oldTossup, tossup: nextTossup, type }) {
+  console.log('next() called with:', { packetLength, oldTossup, nextTossup, type });
+  
   if (type === 'start') {
+    console.log('Handling start type');
     document.getElementById('next').disabled = false;
     document.getElementById('settings').classList.add('d-none');
   }
 
   if (type !== 'start') {
+    console.log('Creating tossup game card for old tossup');
     createTossupGameCard({
       starred: room.mode === MODE_ENUM.STARRED ? true : (room.mode === MODE_ENUM.LOCAL ? false : null),
       tossup: oldTossup
     });
   }
 
-  document.getElementById('answer').textContent = '';
-  document.getElementById('question').textContent = '';
-  document.getElementById('toggle-correct').textContent = 'I was wrong';
-  document.getElementById('toggle-correct').classList.add('d-none');
+  // Clear all question and answer displays
+  console.log('Clearing all displays...');
+  const elements = {
+    question: document.getElementById('question'),
+    answerDisplay: document.getElementById('answer-display'),
+    userAnswer: document.getElementById('user-answer'),
+    toggleCorrect: document.getElementById('toggle-correct')
+  };
+
+  console.log('Found elements:', {
+    question: !!elements.question,
+    answerDisplay: !!elements.answerDisplay,
+    userAnswer: !!elements.userAnswer,
+    toggleCorrect: !!elements.toggleCorrect
+  });
+
+  // Clear all text content
+  if (elements.question) elements.question.textContent = '';
+  if (elements.answerDisplay) elements.answerDisplay.textContent = '';
+  if (elements.userAnswer) elements.userAnswer.textContent = '';
+  if (elements.toggleCorrect) {
+    elements.toggleCorrect.textContent = 'I was wrong';
+    elements.toggleCorrect.classList.add('d-none');
+  }
+
+  // Hide answer input if it's visible
+  const answerInputGroup = document.getElementById('answer-input-group');
+  if (answerInputGroup) {
+    answerInputGroup.classList.add('d-none');
+  }
+
+  console.log('Displays cleared. Current content:', {
+    question: elements.question?.textContent,
+    answerDisplay: elements.answerDisplay?.textContent,
+    userAnswer: elements.userAnswer?.textContent
+  });
 
   if (type === 'end') {
+    console.log('Handling end type');
     document.getElementById('buzz').disabled = true;
     document.getElementById('next').disabled = true;
     document.getElementById('pause').disabled = true;
   } else {
+    console.log('Setting up for next question');
     document.getElementById('buzz').textContent = 'Buzz';
     document.getElementById('buzz').disabled = false;
     document.getElementById('next').textContent = 'Skip';
@@ -227,18 +265,67 @@ function pause ({ paused }) {
   }
 }
 
-function revealAnswer ({ answer, question }) {
-  document.getElementById('question').innerHTML = question;
-  document.getElementById('answer').innerHTML = 'ANSWER: ' + answer;
-  document.getElementById('pause').disabled = true;
+function revealAnswer ({ answer, question, correctAnswer }) {
+  console.log('revealAnswer called with:', { answer, question, correctAnswer });
+  
+  const elements = {
+    question: document.getElementById('question'),
+    answerDisplay: document.getElementById('answer-display'),
+    userAnswer: document.getElementById('user-answer'),
+    pause: document.getElementById('pause'),
+    buzz: document.getElementById('buzz'),
+    start: document.getElementById('start'),
+    toggleCorrect: document.getElementById('toggle-correct')
+  };
 
-  document.getElementById('buzz').disabled = true;
-  document.getElementById('buzz').textContent = 'Buzz';
-  document.getElementById('start').disabled = false;
-  document.getElementById('start').textContent = 'Next';
+  console.log('Found elements in revealAnswer:', {
+    question: !!elements.question,
+    answerDisplay: !!elements.answerDisplay,
+    userAnswer: !!elements.userAnswer,
+    pause: !!elements.pause,
+    buzz: !!elements.buzz,
+    start: !!elements.start,
+    toggleCorrect: !!elements.toggleCorrect
+  });
 
-  document.getElementById('toggle-correct').classList.remove('d-none');
-  document.getElementById('toggle-correct').textContent = room.previous.isCorrect ? 'I was wrong' : 'I was right';
+  if (elements.question) {
+    console.log('Setting question content');
+    elements.question.innerHTML = question;
+  }
+
+  // Use the correct answer from the tossup if available
+  const finalCorrectAnswer = correctAnswer || (window.room?.tossup?.answer);
+  console.log('Using correct answer:', finalCorrectAnswer);
+
+  if (elements.answerDisplay) {
+    console.log('Setting answer display content');
+    elements.answerDisplay.innerHTML = 'ANSWER: ' + finalCorrectAnswer;
+  }
+
+  if (elements.userAnswer) {
+    console.log('Setting user answer content');
+    elements.userAnswer.innerHTML = 'YOUR ANSWER: ' + answer;
+  }
+
+  console.log('Current display content:', {
+    question: elements.question?.innerHTML,
+    answerDisplay: elements.answerDisplay?.innerHTML,
+    userAnswer: elements.userAnswer?.innerHTML
+  });
+
+  if (elements.pause) elements.pause.disabled = true;
+  if (elements.buzz) {
+    elements.buzz.disabled = true;
+    elements.buzz.textContent = 'Buzz';
+  }
+  if (elements.start) {
+    elements.start.disabled = false;
+    elements.start.textContent = 'Next';
+  }
+  if (elements.toggleCorrect) {
+    elements.toggleCorrect.classList.remove('d-none');
+    elements.toggleCorrect.textContent = room.previous.isCorrect ? 'I was wrong' : 'I was right';
+  }
 }
 
 function setCategories ({ alternateSubcategories, categories, subcategories, percentView, categoryPercents }) {
@@ -355,8 +442,15 @@ function updateQuestion ({ word }) {
   document.getElementById('question').textContent += word + ' ';
 }
 
-function updateStatDisplay ({ powers, tens, negs, tuh, points, celerity }) {
-  document.getElementById('statline').textContent = `${powers}/${tens}/${negs} with ${tuh} tossups seen (${points} pts, celerity: ${celerity.toFixed(2)})`;
+// Make updateStatDisplay globally accessible
+window.updateStatDisplay = function() {
+  // Get the current score from the statline element
+  const statline = document.getElementById('statline');
+  const currentScore = parseInt(statline.textContent.split(': ')[1]) || 0;
+  
+  // Increment score by 4 for correct answer
+  const newScore = currentScore + 4;
+  statline.textContent = `SCORE: ${newScore}`;
 }
 
 function updateTimerDisplay (time) {
