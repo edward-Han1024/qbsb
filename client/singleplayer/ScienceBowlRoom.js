@@ -116,9 +116,10 @@ export default class ScienceBowlRoom extends QuestionRoom {
     this.wordIndex = 0;
     this.tossupProgress = 'READING';
 
-    // Ensure isTossup is properly set
-    question.isTossup = question.isTossup === false ? false : false;
-    console.log('ScienceBowlRoom: Question type:', { isTossup: question.isTossup });
+    // Convert type enum to boolean isTossup
+    const questionType = question.type;
+    question.isTossup = questionType === 'tossup';
+    console.log('ScienceBowlRoom: Question type:', { type: questionType, isTossup: question.isTossup });
 
     console.log('ScienceBowlRoom: Emitting question:', question);
     this.tossup = question;

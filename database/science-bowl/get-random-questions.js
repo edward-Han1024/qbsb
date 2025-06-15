@@ -20,7 +20,13 @@ export async function getRandomQuestions(query) {
   console.log('getRandomQuestions: Sample of questions in database:', allQuestions.slice(0, 2));
   console.log('getRandomQuestions: Total questions in database:', allQuestions.length);
   
-  const { subjects, competitions, years, isMcq, isTossup, number } = query;
+  // Extract parameters without default values to preserve undefined
+  const subjects = query.subjects;
+  const competitions = query.competitions;
+  const years = query.years;
+  const isMcq = query.isMcq;
+  const isTossup = query.isTossup;
+  const number = query.number;
   console.log('getRandomQuestions: Parsed parameters:', { subjects, competitions, years, isMcq, isTossup, number });
 
   const matchStage = {};
@@ -41,9 +47,10 @@ export async function getRandomQuestions(query) {
     matchStage.is_mcq = isMcq;
   }
   
-  if (isTossup !== undefined) {
-    matchStage.is_tossup = isTossup;
-  }
+  // Only apply is_tossup filter if other filters are present
+  // if (isTossup !== undefined && Object.keys(matchStage).length > 0) {
+  //   matchStage.is_tossup = isTossup;
+  // }
 
   console.log('getRandomQuestions: Final match stage:', JSON.stringify(matchStage, null, 2));
 

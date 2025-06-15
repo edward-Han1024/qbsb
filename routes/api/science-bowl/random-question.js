@@ -26,8 +26,8 @@ router.get('/', async (req, res) => {
       subjects,
       competitions: req.query.competitions ? req.query.competitions.split(',') : [],
       years: req.query.years ? req.query.years.split(',').map(Number) : [],
-      isMcq: req.query.isMcq === 'true',
-      isTossup: req.query.isTossup === 'true',
+      isMcq: req.query.isMcq !== undefined ? req.query.isMcq === 'true' : undefined,
+      isTossup: req.query.isTossup !== undefined ? req.query.isTossup === 'true' : undefined,
       number: parseInt(req.query.number) || 1
     };
     
