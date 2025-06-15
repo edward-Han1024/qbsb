@@ -40,7 +40,12 @@ export default class ClientScienceBowlRoom extends ScienceBowlRoom {
       console.log('ClientScienceBowlRoom: Sending query to API:', query);
       const questions = await api.getRandomScienceBowlQuestion(query);
       console.log('ClientScienceBowlRoom: Received questions from API:', questions);
-      return questions;
+      
+      // Map is_tossup from database to isTossup for our application
+      return questions.map(question => ({
+        ...question,
+        isTossup: question.is_tossup === true // Map from database field to our field
+      }));
     };
     this.getRandomStarredQuestion = getRandomStarredQuestion;
     this.getSet = async ({ setName, packetNumbers }) => setName ? await api.getPacketScienceBowlQuestions(setName, packetNumbers[0] ?? 1) : [];
@@ -57,6 +62,10 @@ export default class ClientScienceBowlRoom extends ScienceBowlRoom {
         console.log('ClientScienceBowlRoom: Handling start message');
         const startResult = await super.message(userId, message);
         console.log('ClientScienceBowlRoom: Start message handled, result:', startResult);
+        if (startResult && typeof startResult.isTossup === 'boolean') {
+          console.log('ClientScienceBowlRoom: Storing isTossup:', startResult.isTossup);
+          this.tossup = { ...this.tossup, isTossup: startResult.isTossup };
+        }
         return startResult;
       default: 
         console.log('ClientScienceBowlRoom: Forwarding message to parent class');

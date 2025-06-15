@@ -448,13 +448,7 @@ window.updateStatDisplay = function() {
   console.log('Current room state:', {
     room: window.room,
     tossup: window.room?.tossup,
-    questionType: window.room?.tossup?.type,
-    isTossup: window.room?.tossup?.isTossup,
-    rawIsTossup: window.room?.tossup?.isTossup === false ? 'false' : 
-                 window.room?.tossup?.isTossup === true ? 'true' : 
-                 window.room?.tossup?.isTossup === undefined ? 'undefined' : 
-                 window.room?.tossup?.isTossup === null ? 'null' : 
-                 String(window.room?.tossup?.isTossup)
+    isTossup: window.room?.tossup?.isTossup
   });
 
   // Get the current score from the statline element
@@ -462,13 +456,13 @@ window.updateStatDisplay = function() {
   const currentScore = parseInt(statline.textContent.split(': ')[1]) || 0;
   console.log('Current score:', currentScore);
   
-  // Check if current question is a bonus
-  // A question is a bonus if isTossup is explicitly false
-  const isBonus = window.room?.tossup?.isTossup === false;
-  console.log('Is bonus question?', isBonus, 'because isTossup is:', window.room?.tossup?.isTossup);
+  // Check if current question is a tossup
+  // A question is a tossup if isTossup is true
+  const isTossup = window.room?.tossup?.isTossup === true;
+  console.log('Is tossup question?', isTossup, 'because isTossup is:', window.room?.tossup?.isTossup);
   
-  // Increment score by 10 for bonus, 4 for tossup
-  const pointsToAdd = isBonus ? 10 : 4;
+  // Increment score by 4 for tossup, 10 for bonus
+  const pointsToAdd = isTossup ? 4 : 10;
   console.log('Points to add:', pointsToAdd);
   
   const newScore = currentScore + pointsToAdd;

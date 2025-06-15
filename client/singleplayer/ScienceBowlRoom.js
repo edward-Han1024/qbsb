@@ -116,10 +116,9 @@ export default class ScienceBowlRoom extends QuestionRoom {
     this.wordIndex = 0;
     this.tossupProgress = 'READING';
 
-    // Convert type enum to boolean isTossup
-    const questionType = question.type;
-    question.isTossup = questionType === 'tossup';
-    console.log('ScienceBowlRoom: Question type:', { type: questionType, isTossup: question.isTossup });
+    // For Science Bowl questions, isTossup is already a boolean field
+    // No need to convert from type enum
+    console.log('ScienceBowlRoom: Question type:', { isTossup: question.isTossup });
 
     console.log('ScienceBowlRoom: Emitting question:', question);
     this.tossup = question;
