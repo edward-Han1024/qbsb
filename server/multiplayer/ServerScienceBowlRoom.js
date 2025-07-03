@@ -7,7 +7,7 @@ import ScienceBowlRoom from '../../client/singleplayer/ScienceBowlRoom.js';
 import RateLimit from '../RateLimit.js';
 import getRandomScienceBowlQuestions from '../../database/science-bowl/get-query.js';
 import ScienceBowlCategoryManager from '../../quizbowl/ScienceBowlCategoryManager.js';
-import answerValidator from '../../client/singleplayer/science-bowl/answer-validator.js';
+import answerValidator from '../../client/multiplayerlayer/answer-validator-multiplayer.js';
 
 export default class ServerScienceBowlRoom extends ScienceBowlRoom {
   constructor(name, ownerId, isPermanent = false, subjects = []) {
@@ -29,6 +29,8 @@ export default class ServerScienceBowlRoom extends ScienceBowlRoom {
       public: true,
       controlled: false
     };
+    this.players = this.players || {};
+    this.sockets = this.sockets || {};
     setInterval(this.cleanupExpiredBansAndKicks.bind(this), 5 * 60 * 1000);
   }
 
@@ -49,6 +51,103 @@ export default class ServerScienceBowlRoom extends ScienceBowlRoom {
     }
   }
 
-  // The rest of the multiplayer logic (ban, chat, connection, etc.) can be copied from ServerTossupRoom and adapted as needed.
+  allowed(userId) {
+    return (userId === this.ownerId) || !this.settings.controlled;
+  }
+
+  connection(socket, userId, username, ip, userAgent = '') {
+    this.cleanupExpiredBansAndKicks();
+    if (this.sockets[userId]) {
+      this.sendToSocket(userId, { type: 'error', message: 'You joined on another tab' });
+      setTimeout(() => this.close(userId), 5000);
+    }
+    const isNew = !(userId in this.players);
+    if (isNew) { this.players[userId] = new ServerPlayer(userId); }
+    this.players[userId].online = true;
+    this.sockets[userId] = socket;
+    username = this.players[userId].safelySetUsername(username);
+    if (this.bannedUserList.has(userId)) {
+      this.sendToSocket(userId, { type: 'enforcing-removal', removalType: 'ban' });
+      return;
+    }
+    if (this.kickedUserList.has(userId)) {
+      this.sendToSocket(userId, { type: 'enforcing-removal', removalType: 'kick' });
+      return;
+    }
+    socket.on('message', message => {
+      if (this.rateLimiter(socket) && !this.rateLimitExceeded.has(username)) {
+        this.rateLimitExceeded.add(username);
+        return;
+      }
+      try {
+        message = JSON.parse(message);
+      } catch (error) {
+        return;
+      }
+      this.message(userId, message);
+    });
+    socket.on('close', this.close.bind(this, userId));
+    socket.send(JSON.stringify({
+      type: 'connection-acknowledged',
+      userId,
+      ownerId: this.ownerId,
+      players: this.players,
+      isPermanent: this.isPermanent,
+      buzzedIn: this.buzzedIn,
+      canBuzz: this.settings.rebuzz || !this.buzzes?.includes(userId),
+      mode: this.mode,
+      packetLength: this.packetLength,
+      questionProgress: this.tossupProgress,
+      setLength: this.setLength,
+      settings: this.settings
+    }));
+    socket.send(JSON.stringify({ type: 'connection-acknowledged-query', ...this.query, ...this.categoryManager.export() }));
+    socket.send(JSON.stringify({ type: 'connection-acknowledged-tossup', tossup: this.tossup }));
+    this.emitMessage({ type: 'join', isNew, userId, username, user: this.players[userId] });
+  }
+
+  close(userId) {
+    if (!this.players[userId]) return;
+    if (this.buzzedIn === userId) {
+      this.giveAnswer(userId, { givenAnswer: this.liveAnswer });
+      this.buzzedIn = null;
+    }
+    this.leave(userId);
+  }
+
+  chat(userId, { message }) {
+    if (this.settings.public || typeof message !== 'string') { return false; }
+    const username = this.players[userId].username;
+    this.emitMessage({ type: 'chat', message, username, userId });
+  }
+
+  chatLiveUpdate(userId, { message }) {
+    if (this.settings.public || typeof message !== 'string') { return false; }
+    const username = this.players[userId].username;
+    this.emitMessage({ type: 'chat-live-update', message, username, userId });
+  }
+
+  cleanupExpiredBansAndKicks() {
+    const now = Date.now();
+    this.bannedUserList.forEach((banTime, userId) => {
+      if (now - banTime > 1000 * 60 * 30) {
+        this.bannedUserList.delete(userId);
+      }
+    });
+    this.kickedUserList.forEach((kickTime, userId) => {
+      if (now - kickTime > 1000 * 60 * 30) {
+        this.kickedUserList.delete(userId);
+      }
+    });
+  }
+
+  ban(userId, { targetId, targetUsername }) {
+    if (this.ownerId !== userId) { return; }
+    this.emitMessage({ type: 'confirm-ban', targetId, targetUsername });
+    this.bannedUserList.set(targetId, Date.now());
+    setTimeout(() => this.close(targetId), 1000);
+  }
+
+  // Votekick, mute, and other moderation features can be ported/adapted as needed from ServerTossupRoom.js
   // ...
 } 

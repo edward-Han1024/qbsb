@@ -398,8 +398,8 @@
     </div>
 
     <script type="module" src="/bootstrap/bootstrap.bundle.min.js"></script>
-    <script type="module" src="/script.js"></script>
-    <script type="module" src="index.min.js"></script>
+    <script type="module" src="../scripts/apply-theme.js"></script>
+    <script type="module" src="./science-bowl-room.min.js"></script>
     <script>
         // Initialize updateStatDisplay if not already defined
         if (typeof window.updateStatDisplay !== 'function') {
@@ -441,7 +441,7 @@
         }
     </script>
     <script type="module">
-        import { validateAnswer, formatValidationResult } from './answer-validator.js';
+        import { validateAnswer, formatValidationResult } from './answer-validator-multiplayer.js';
         
         // Handle buzz and answer submission
         document.getElementById('buzz').addEventListener('click', function() {

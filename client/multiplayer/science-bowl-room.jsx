@@ -1,21 +1,21 @@
 console.log('Science Bowl script loaded');
 
-import api from '../../scripts/api/index.js';
-import questionStats from '../../scripts/auth/question-stats.js';
-import audio from '../../audio/index.js';
-import { MODE_ENUM } from '../../../quizbowl/constants.js';
-import Player from '../../../quizbowl/Player.js';
-import ClientScienceBowlRoom from '../ClientScienceBowlRoom.js';
-import { arrayToRange, rangeToArray } from '../../scripts/utilities/ranges.js';
-import createTossupGameCard from '../../scripts/utilities/tossup-game-card.js';
-import { getDropdownValues } from '../../scripts/utilities/dropdown-checklist.js';
-import ScienceBowlCategoryModal from '../../scripts/components/ScienceBowlCategoryModal.min.js';
-import DifficultyDropdown from '../../scripts/components/DifficultyDropdown.min.js';
-import upsertPlayerItem from '../../scripts/upsertPlayerItem.js';
-import aiBots from '../ai-mode/ai-bots.js';
-import AIBot from '../ai-mode/AIBot.js';
-import { SBCATEGORIES } from '../../../quizbowl/categories.js';
-import ScienceBowlCategoryManager from '../../../quizbowl/ScienceBowlCategoryManager.js';
+import api from '../scripts/api/index.js';
+import questionStats from '../scripts/auth/question-stats.js';
+import audio from '../audio/index.js';
+import { MODE_ENUM } from '../../quizbowl/constants.js';
+import Player from '../../quizbowl/Player.js';
+import ClientScienceBowlRoom from '../singleplayer/ClientScienceBowlRoom.js';
+import { arrayToRange, rangeToArray } from '../scripts/utilities/ranges.js';
+import createTossupGameCard from '../scripts/utilities/tossup-game-card.js';
+import { getDropdownValues } from '../scripts/utilities/dropdown-checklist.js';
+import ScienceBowlCategoryModal from '../scripts/components/ScienceBowlCategoryModal.min.js';
+import DifficultyDropdown from '../scripts/components/DifficultyDropdown.min.js';
+import upsertPlayerItem from '../scripts/upsertPlayerItem.js';
+import aiBots from '../singleplayer/ai-mode/ai-bots.js';
+import AIBot from '../singleplayer/ai-mode/AIBot.js';
+import { SBCATEGORIES } from '../../quizbowl/categories.js';
+import ScienceBowlCategoryManager from '../../quizbowl/ScienceBowlCategoryManager.js';
 
 let maxPacketNumber = 24;
 
