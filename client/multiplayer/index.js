@@ -2,6 +2,26 @@ import api from '../scripts/api/index.js';
 
 const ROOM_NAME_MAX_LENGTH = 32;
 
+// Username modal logic
+function showUsernameModal() {
+  const modal = new bootstrap.Modal(document.getElementById('username-modal'));
+  modal.show();
+  document.getElementById('username-confirm').onclick = function() {
+    const username = document.getElementById('username-input').value.trim();
+    if (username.length > 0) {
+      localStorage.setItem('multiplayer-username', username);
+      modal.hide();
+    }
+  };
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  let username = localStorage.getItem('multiplayer-username');
+  if (!username) {
+    showUsernameModal();
+  }
+});
+
 document.getElementById('form').addEventListener('submit', (event) => {
   event.preventDefault();
 
@@ -22,9 +42,11 @@ document.getElementById('form').addEventListener('submit', (event) => {
   if (isPrivate) params.set('private', 'true');
   if (isControlled) params.set('controlled', 'true');
 
-    const roomType = document.getElementById('room-type').value;
+  const roomType = document.getElementById('room-type').value;
+  const username = localStorage.getItem('multiplayer-username') || '';
+  params.set('username', username);
   if (roomType === 'Science Bowl') {
-    window.location.href = `/multiplayer/science-bowl-room.html?roomName=${encodeURIComponent(roomName)}`;
+    window.location.href = `/multiplayer/science-bowl-room.html?roomName=${encodeURIComponent(roomName)}&${params.toString()}`;
   } else {
     window.location.href = `/multiplayer/${encodeURIComponent(roomName)}?${params.toString()}`;
   }

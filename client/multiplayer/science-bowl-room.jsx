@@ -23,12 +23,20 @@ const modeVersion = '2025-01-14';
 const queryVersion = '2025-05-07';
 const settingsVersion = '2024-10-16';
 const USER_ID = 'user';
-const USERNAME = 'user';
-const VERSION = '2025-05-07';
+
+// Utility to get query param
+function getQueryParam(name) {
+  const url = new URL(window.location.href);
+  return url.searchParams.get(name);
+}
+
+// Get username from query or localStorage
+const USERNAME = getQueryParam('username') || localStorage.getItem('multiplayer-username') || 'Player';
 
 const room = new ClientScienceBowlRoom();
 window.room = room; // Make room globally available
 room.players[USER_ID] = new Player(USER_ID);
+room.players[USER_ID].username = USERNAME;
 room.categoryManager = new ScienceBowlCategoryManager();
 
 // Load saved category state
@@ -118,17 +126,6 @@ async function giveAnswer ({ directive, directedPrompt, perQuestionCelerity, sco
     document.getElementById('answer-input').focus();
     document.getElementById('answer-input').placeholder = directedPrompt ? `Prompt: "${directedPrompt}"` : 'Prompt';
     return;
-  }
-
-  if (userId === USER_ID) {
-    // Update the player's score based on isCorrect
-    if (isCorrect) {
-      const pointValue = tossup?.isTossup ? 4 : 10; // 4 points for tossup, 10 for bonus
-      room.players[USER_ID].score += pointValue;
-      updateStatDisplay();
-    }
-  } else if (aiBot.active) {
-    upsertPlayerItem(aiBot.player);
   }
 
   document.getElementById('answer-input').value = '';
@@ -496,6 +493,60 @@ function updateTimerDisplay (time) {
   const fraction = time % 10;
   document.getElementById('timer').querySelector('.face').textContent = face;
   document.getElementById('timer').querySelector('.fraction').textContent = '.' + fraction;
+}
+
+// Utility to update the player list sidebar
+function updatePlayerList(players) {
+  const playerList = document.getElementById('player-list-group');
+  const hr = document.getElementById('player-list-group-hr');
+  if (!playerList) return;
+  const playerArray = Object.values(players || {});
+  if (playerArray.length === 0) {
+    playerList.classList.add('d-none');
+    if (hr) hr.classList.add('d-none');
+    return;
+  }
+  playerList.innerHTML = '';
+  playerArray.forEach(player => {
+    const li = document.createElement('li');
+    li.className = 'list-group-item d-flex justify-content-between align-items-center';
+    li.textContent = player.username || player.userId || 'Player';
+    const scoreSpan = document.createElement('span');
+    scoreSpan.className = 'badge bg-primary rounded-pill';
+    scoreSpan.textContent = player.score != null ? player.score : 0;
+    li.appendChild(scoreSpan);
+    playerList.appendChild(li);
+  });
+  playerList.classList.remove('d-none');
+  if (hr) hr.classList.remove('d-none');
+}
+
+// Listen for multiplayer events to update player list
+function handlePlayerEvents(data) {
+  if (data.type === 'connection-acknowledged' || data.type === 'join' || data.type === 'give-answer') {
+    if (data.players) {
+      updatePlayerList(data.players);
+    } else if (window.room && window.room.players) {
+      updatePlayerList(window.room.players);
+    }
+  }
+  if (data.type === 'players-update') {
+    console.log('[Client] Received players-update:', data.players);
+    updatePlayerList(data.players);
+  }
+}
+
+// Patch the main message handler to call handlePlayerEvents
+const originalOnMessage = onmessage;
+function onmessagePatched(message) {
+  const data = typeof message === 'string' ? JSON.parse(message) : message;
+  handlePlayerEvents(data);
+  return originalOnMessage(message);
+}
+window.onmessage = onmessagePatched;
+// If using a socket or other event system, also patch there
+if (typeof socket !== 'undefined') {
+  socket.send = onmessagePatched;
 }
 
 // Initialize the room

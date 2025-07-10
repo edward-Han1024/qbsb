@@ -150,4 +150,17 @@ export default class ServerScienceBowlRoom extends ScienceBowlRoom {
 
   // Votekick, mute, and other moderation features can be ported/adapted as needed from ServerTossupRoom.js
   // ...
-} 
+
+  giveAnswer(userId, { givenAnswer }) {
+    const result = super.giveAnswer(userId, { givenAnswer });
+
+    if (this.previous && this.previous.userId === userId && this.previous.isCorrect) {
+      const isTossup = this.tossup && this.tossup.isTossup === true;
+      const points = isTossup ? 4 : 10;
+      if (!this.players[userId].points) this.players[userId].points = 0;
+      this.players[userId].points += points;
+    }
+    this.emitMessage({ type: 'players-update', players: this.players });
+    return result;
+  }
+}
