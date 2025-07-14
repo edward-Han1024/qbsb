@@ -25,7 +25,6 @@ export default class ServerTossupRoom extends TossupRoom {
     this.getNumPackets = getNumPackets;
     this.getRandomQuestions = getRandomTossups;
     this.getSet = getSet;
-    this.getSetList = getSetList;
     this.bannedUserList = new Map();
     this.kickedUserList = new Map();
     this.votekickList = [];
@@ -41,7 +40,7 @@ export default class ServerTossupRoom extends TossupRoom {
       controlled: false
     };
 
-    this.getSetList().then(setList => { this.setList = setList; });
+    getSetList().then(setList => { this.setList = setList; });
     setInterval(this.cleanupExpiredBansAndKicks.bind(this), 5 * 60 * 1000); // 5 minutes
   }
 
@@ -159,7 +158,7 @@ export default class ServerTossupRoom extends TossupRoom {
     if (this.tossupProgress === TOSSUP_PROGRESS_ENUM.ANSWER_REVEALED && this.tossup?.answer) {
       socket.send(JSON.stringify({
         type: 'reveal-answer',
-        question: insertTokensIntoHTML(this.tossup.question, this.tossup.question_sanitized, [this.buzzpointIndices], [' (#) ']),
+        question: insertTokensIntoHTML(this.tossup.question, this.tossup.question_sanitized, { ' (#) ': this.buzzpointIndices }),
         answer: this.tossup.answer
       }));
     }
@@ -233,6 +232,10 @@ export default class ServerTossupRoom extends TossupRoom {
     this.adjustQuery(['setName'], [setName]);
   }
 
+  setPacketNumbers (userId, { packetNumbers }) {
+    super.setPacketNumbers(userId, { doNotFetch: false, packetNumbers });
+  }
+
   setReadingSpeed (userId, { readingSpeed }) {
     if (this.isPermanent || !this.allowed(userId)) { return false; }
     super.setReadingSpeed(userId, { readingSpeed });
@@ -242,7 +245,7 @@ export default class ServerTossupRoom extends TossupRoom {
     if (!this.allowed(userId)) { return; }
     if (!this.setList) { return; }
     if (!this.setList.includes(setName)) { return; }
-    super.setSetName(userId, { setName });
+    super.setSetName(userId, { doNotFetch: false, setName });
   }
 
   setStrictness (userId, { strictness }) {
@@ -306,7 +309,7 @@ export default class ServerTossupRoom extends TossupRoom {
 
   toggleStandardOnly (userId, { standardOnly }) {
     if (!this.allowed(userId)) { return; }
-    super.toggleStandardOnly(userId, { standardOnly });
+    super.toggleStandardOnly(userId, { doNotFetch: false, standardOnly });
   }
 
   togglePublic (userId, { public: isPublic }) {

@@ -1,20 +1,20 @@
 import expressIpfilter from 'express-ipfilter';
 const { IpFilter, IpDeniedError } = expressIpfilter;
 
-const denied = [
+const ips = [
   '3.236.192.58',
   '18.206.238.89',
   '18.215.118.139',
   '73.51.224.137'
 ];
 
-const clientIp = (req, _res) => {
+export const clientIp = (req, _res) => {
   return req.headers['x-forwarded-for'] ? (req.headers['x-forwarded-for']).split(',')[0] : req.ip;
 };
 
-const ipFilterMiddleware = IpFilter(denied, { mode: 'deny', log: true, detectIp: clientIp });
+export const ipFilterMiddleware = IpFilter(ips, { mode: 'deny', log: false, detectIp: clientIp });
 
-const ipFilterError = (err, req, res, _next) => {
+export const ipFilterError = (err, req, res, _next) => {
   if (err instanceof IpDeniedError) {
     console.log(`Blocked IP: ${req.ip}`);
     res.status(403);
@@ -23,5 +23,3 @@ const ipFilterError = (err, req, res, _next) => {
     res.status(err.status || 500);
   }
 };
-
-export { clientIp, ipFilterMiddleware, ipFilterError };

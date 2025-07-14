@@ -5,7 +5,14 @@ export default class BonusRoom extends QuestionRoom {
   constructor (name, categories = [], subcategories = [], alternateSubcategories = []) {
     super(name, categories, subcategories, alternateSubcategories);
 
-    this.getNextLocalQuestion = () => this.localQuestions.bonuses.length > 0 ? this.localQuestions.bonuses.shift() : null;
+    this.getNextLocalQuestion = () => {
+      if (this.localQuestions.bonuses.length === 0) { return null; }
+      if (this.settings.randomizeOrder) {
+        const randomIndex = Math.floor(Math.random() * this.localQuestions.bonuses.length);
+        return this.localQuestions.bonuses.splice(randomIndex, 1)[0];
+      }
+      return this.localQuestions.bonuses.shift();
+    };
 
     this.bonus = {};
     this.bonusProgress = BONUS_PROGRESS_ENUM.NOT_STARTED;
@@ -58,7 +65,7 @@ export default class BonusRoom extends QuestionRoom {
     this.emitMessage({ type: 'timer-update', timeRemaining: ANSWER_TIME_LIMIT * 10 });
 
     const { directive, directedPrompt } = this.checkAnswer(this.bonus.answers[this.currentPartNumber], givenAnswer);
-    this.emitMessage({ type: 'give-answer', currentPartNumber: this.currentPartNumber, directive, directedPrompt });
+    this.emitMessage({ type: 'give-answer', currentPartNumber: this.currentPartNumber, directive, directedPrompt, userId });
 
     if (directive === 'prompt') {
       this.startServerTimer(
