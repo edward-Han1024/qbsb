@@ -765,6 +765,14 @@ function hideAIExplanation() {
   if (suggestedCard) suggestedCard.classList.add('d-none');
   if (suggestedContent) suggestedContent.innerHTML = '';
   if (suggestedLoading) suggestedLoading.classList.add('d-none');
+
+  // Also hide and clear extra practice if present
+  const practiceCard = document.getElementById('extra-practice');
+  const practiceContent = document.getElementById('extra-practice-content');
+  const practiceLoading = document.getElementById('extra-practice-loading');
+  if (practiceCard) practiceCard.classList.add('d-none');
+  if (practiceContent) practiceContent.innerHTML = '';
+  if (practiceLoading) practiceLoading.classList.add('d-none');
 }
 
 function showAIExplanation() {

@@ -241,6 +241,9 @@
                                 <button type="button" class="btn btn-outline-secondary btn-sm" id="get-suggested-reading">
                                     <i class="bi bi-book"></i> Suggested Reading
                                 </button>
+                                <button type="button" class="btn btn-outline-success btn-sm" id="get-extra-practice">
+                                    <i class="bi bi-list-check"></i> Extra Practice
+                                </button>
                             </div>
                         </div>
                         <div id="ai-explanation" class="d-none">
@@ -269,6 +272,20 @@
                                             <span class="visually-hidden">Loading...</span>
                                         </div>
                                         <span class="ms-2">Finding reputable resources...</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card mt-3 d-none" id="extra-practice">
+                                <div class="card-header bg-success text-white">
+                                    <h6 class="mb-0">Extra Practice</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div id="extra-practice-content"></div>
+                                    <div id="extra-practice-loading" class="text-center d-none">
+                                        <div class="spinner-border spinner-border-sm" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                        <span class="ms-2">Generating practice questions...</span>
                                     </div>
                                 </div>
                             </div>
@@ -567,6 +584,9 @@
           if (wrap) wrap.classList.add('d-none');
           if (content) content.innerHTML = '';
           if (loading) loading.classList.add('d-none');
+          // Also clear extra sections
+          sbHideSuggested();
+          sbHidePractice();
         }
 
         function sbShowAIExplanation() {
@@ -618,6 +638,55 @@
         function sbHideSuggestedLoading() {
           const loading = document.getElementById('suggested-reading-loading');
           if (loading) loading.classList.add('d-none');
+        }
+
+        function sbShowPractice() {
+          const card = document.getElementById('extra-practice');
+          const content = document.getElementById('extra-practice-content');
+          if (content) content.innerHTML = '';
+          if (card) card.classList.remove('d-none');
+          try { card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (_) {}
+        }
+
+        function sbHidePractice() {
+          const card = document.getElementById('extra-practice');
+          const content = document.getElementById('extra-practice-content');
+          const loading = document.getElementById('extra-practice-loading');
+          if (content) content.innerHTML = '';
+          if (loading) loading.classList.add('d-none');
+          if (card) card.classList.add('d-none');
+        }
+
+        function sbShowPracticeLoading() {
+          const loading = document.getElementById('extra-practice-loading');
+          const content = document.getElementById('extra-practice-content');
+          if (content) content.innerHTML = '';
+          if (loading) loading.classList.remove('d-none');
+        }
+
+        function sbHidePracticeLoading() {
+          const loading = document.getElementById('extra-practice-loading');
+          if (loading) loading.classList.add('d-none');
+        }
+
+        function sbRenderPractice(problems) {
+          const content = document.getElementById('extra-practice-content');
+          if (!content) return;
+          if (!Array.isArray(problems) || problems.length === 0) {
+            content.innerHTML = '<div class="alert alert-warning">No practice problems returned.</div>';
+            return;
+          }
+          const items = problems.map((p, idx) => {
+            const q = p.question || '';
+            const a = p.answer || '';
+            const ex = p.explanation || '';
+            return `<li class="mb-3">
+              <div><strong>Q${idx + 1}.</strong> ${q}</div>
+              <div class="mt-1"><span class="fw-semibold">Answer:</span> ${a}</div>
+              <div class="mt-1"><span class="fw-semibold">Explanation:</span> ${ex}</div>
+            </li>`;
+          }).join('');
+          content.innerHTML = `<ol class="mb-0 ps-3">${items}</ol>`;
         }
 
         function sbRenderSuggestions(suggestions) {
@@ -732,6 +801,42 @@
           }
         }
 
+        async function sbGetExtraPractice() {
+          try {
+            const qEl = document.getElementById('question');
+            const aEl = document.getElementById('answer-display');
+            if (!qEl || !aEl) { console.error('[SBAI] question/answer elements missing'); return; }
+            const question = (qEl.textContent || '').trim();
+            const rawAnswer = (aEl.textContent || '').trim();
+            const answer = rawAnswer.replace(/^ANSWER:\\s*/i, '');
+            if (!question) { console.warn('[SBAI] Missing question text'); return; }
+            sbShowPractice();
+            sbShowPracticeLoading();
+            const resp = await fetch('/api/ai-help/extra-practice', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ question, answer, category: sbGetCurrentCategory() })
+            });
+            if (!resp.ok) {
+              const err = await resp.json().catch(() => ({}));
+              throw new Error(err.error || 'Failed to get practice questions');
+            }
+            const ct = resp.headers.get('content-type') || '';
+            if (!ct.includes('application/json')) {
+              const text = await resp.text();
+              throw new Error('Unexpected non-JSON response: ' + text.slice(0, 60));
+            }
+            const data = await resp.json();
+            sbHidePracticeLoading();
+            sbRenderPractice(data.problems);
+          } catch (e) {
+            console.error('[SBAI] Extra practice error:', e);
+            sbHidePracticeLoading();
+            const content = document.getElementById('extra-practice-content');
+            if (content) content.innerHTML = '<div class="alert alert-danger"><strong>Error:</strong> ' + (e?.message || e) + '</div>';
+          }
+        }
+
         function sbInitAIHelp() {
           if (window.__sbAiInited) return;
           window.__sbAiInited = true;
@@ -741,6 +846,8 @@
             if (btn) { e.preventDefault(); sbGetAIExplanation(); }
             const btn2 = e.target && e.target.closest && e.target.closest('#get-suggested-reading');
             if (btn2) { e.preventDefault(); sbGetSuggestedReading(); }
+            const btn3 = e.target && e.target.closest && e.target.closest('#get-extra-practice');
+            if (btn3) { e.preventDefault(); sbGetExtraPractice(); }
           });
           // Observe answer reveal
           const aEl = document.getElementById('answer-display');
