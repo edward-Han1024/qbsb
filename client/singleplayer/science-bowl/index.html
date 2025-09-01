@@ -232,11 +232,16 @@
                     <div id="answer-display" class="mb-3"></div>
                     <div id="user-answer" class="mb-3"></div>
                     <div id="ai-help-section" class="mb-3 d-none">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="d-flex justify-content-between align-items-center mb-2 gap-2 flex-wrap">
                             <h6 class="mb-0">Need help understanding this question?</h6>
-                            <button type="button" class="btn btn-outline-info btn-sm" id="get-ai-help">
-                                <i class="bi bi-lightbulb"></i> Get AI Explanation
-                            </button>
+                            <div class="ms-auto d-flex gap-2">
+                                <button type="button" class="btn btn-outline-info btn-sm" id="get-ai-help">
+                                    <i class="bi bi-lightbulb"></i> Get AI Explanation
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="get-suggested-reading">
+                                    <i class="bi bi-book"></i> Suggested Reading
+                                </button>
+                            </div>
                         </div>
                         <div id="ai-explanation" class="d-none">
                             <div class="card">
@@ -250,6 +255,20 @@
                                             <span class="visually-hidden">Loading...</span>
                                         </div>
                                         <span class="ms-2">Getting AI explanation...</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card mt-3 d-none" id="suggested-reading">
+                                <div class="card-header bg-secondary text-white">
+                                    <h6 class="mb-0">Suggested Reading</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div id="suggested-reading-content"></div>
+                                    <div id="suggested-reading-loading" class="text-center d-none">
+                                        <div class="spinner-border spinner-border-sm" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                        <span class="ms-2">Finding reputable resources...</span>
                                     </div>
                                 </div>
                             </div>
@@ -538,6 +557,7 @@
           if (!el) return;
           el.classList.add('d-none');
           sbHideAIExplanation();
+          sbHideSuggested();
         }
 
         function sbHideAIExplanation() {
@@ -569,6 +589,52 @@
         function sbDisplayExplanation(text) {
           const content = document.getElementById('explanation-content');
           if (content) content.innerHTML = (text || '').replace(/\n/g, '<br>');
+        }
+
+        function sbShowSuggested() {
+          const card = document.getElementById('suggested-reading');
+          const content = document.getElementById('suggested-reading-content');
+          if (content) content.innerHTML = '';
+          if (card) card.classList.remove('d-none');
+          try { card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (_) {}
+        }
+
+        function sbHideSuggested() {
+          const card = document.getElementById('suggested-reading');
+          const content = document.getElementById('suggested-reading-content');
+          const loading = document.getElementById('suggested-reading-loading');
+          if (content) content.innerHTML = '';
+          if (loading) loading.classList.add('d-none');
+          if (card) card.classList.add('d-none');
+        }
+
+        function sbShowSuggestedLoading() {
+          const loading = document.getElementById('suggested-reading-loading');
+          const content = document.getElementById('suggested-reading-content');
+          if (content) content.innerHTML = '';
+          if (loading) loading.classList.remove('d-none');
+        }
+
+        function sbHideSuggestedLoading() {
+          const loading = document.getElementById('suggested-reading-loading');
+          if (loading) loading.classList.add('d-none');
+        }
+
+        function sbRenderSuggestions(suggestions) {
+          const content = document.getElementById('suggested-reading-content');
+          if (!content) return;
+          if (!Array.isArray(suggestions) || suggestions.length === 0) {
+            content.innerHTML = '<div class="alert alert-warning">No suggestions returned.</div>';
+            return;
+          }
+          const items = suggestions.map((s) => {
+            const title = s.title || 'Resource';
+            const type = s.type ? `<span class="badge bg-secondary ms-2">${s.type}</span>` : '';
+            const notes = s.notes ? `<div class="small text-muted">${s.notes}</div>` : '';
+            const link = s.link ? `<a href="${s.link}" target="_blank" rel="noopener">${s.link}</a>` : '';
+            return `<li class="mb-2"><strong>${title}</strong> ${type}<br>${notes}${link ? '<div>' + link + '</div>' : ''}</li>`;
+          }).join('');
+          content.innerHTML = `<ul class="mb-0 ps-3">${items}</ul>`;
         }
 
         function sbGetCurrentCategory() {
@@ -611,6 +677,11 @@
               const err = await resp.json().catch(() => ({}));
               throw new Error(err.error || 'Failed to get AI explanation');
             }
+            const ct = resp.headers.get('content-type') || '';
+            if (!ct.includes('application/json')) {
+              const text = await resp.text();
+              throw new Error('Unexpected non-JSON response: ' + text.slice(0, 60));
+            }
             const data = await resp.json();
             sbHideLoading();
             if (!data?.explanation) {
@@ -625,6 +696,42 @@
           }
         }
 
+        async function sbGetSuggestedReading() {
+          try {
+            const qEl = document.getElementById('question');
+            const aEl = document.getElementById('answer-display');
+            if (!qEl || !aEl) { console.error('[SBAI] question/answer elements missing'); return; }
+            const question = (qEl.textContent || '').trim();
+            const rawAnswer = (aEl.textContent || '').trim();
+            const answer = rawAnswer.replace(/^ANSWER:\\s*/i, '');
+            if (!question) { console.warn('[SBAI] Missing question text'); return; }
+            sbShowSuggested();
+            sbShowSuggestedLoading();
+            const resp = await fetch('/api/ai-help/suggest-reading', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ question, answer, category: sbGetCurrentCategory() })
+            });
+            if (!resp.ok) {
+              const err = await resp.json().catch(() => ({}));
+              throw new Error(err.error || 'Failed to get suggestions');
+            }
+            const ct = resp.headers.get('content-type') || '';
+            if (!ct.includes('application/json')) {
+              const text = await resp.text();
+              throw new Error('Unexpected non-JSON response: ' + text.slice(0, 60));
+            }
+            const data = await resp.json();
+            sbHideSuggestedLoading();
+            sbRenderSuggestions(data.suggestions);
+          } catch (e) {
+            console.error('[SBAI] Suggested reading error:', e);
+            sbHideSuggestedLoading();
+            const content = document.getElementById('suggested-reading-content');
+            if (content) content.innerHTML = '<div class="alert alert-danger"><strong>Error:</strong> ' + (e?.message || e) + '</div>';
+          }
+        }
+
         function sbInitAIHelp() {
           if (window.__sbAiInited) return;
           window.__sbAiInited = true;
@@ -632,6 +739,8 @@
           document.addEventListener('click', (e) => {
             const btn = e.target && e.target.closest && e.target.closest('#get-ai-help');
             if (btn) { e.preventDefault(); sbGetAIExplanation(); }
+            const btn2 = e.target && e.target.closest && e.target.closest('#get-suggested-reading');
+            if (btn2) { e.preventDefault(); sbGetSuggestedReading(); }
           });
           // Observe answer reveal
           const aEl = document.getElementById('answer-display');

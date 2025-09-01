@@ -757,6 +757,14 @@ function hideAIExplanation() {
   if (aiExplanation) aiExplanation.classList.add('d-none');
   if (explanationContent) explanationContent.innerHTML = '';
   if (explanationLoading) explanationLoading.classList.add('d-none');
+
+  // Also hide and clear suggested reading if present
+  const suggestedCard = document.getElementById('suggested-reading');
+  const suggestedContent = document.getElementById('suggested-reading-content');
+  const suggestedLoading = document.getElementById('suggested-reading-loading');
+  if (suggestedCard) suggestedCard.classList.add('d-none');
+  if (suggestedContent) suggestedContent.innerHTML = '';
+  if (suggestedLoading) suggestedLoading.classList.add('d-none');
 }
 
 function showAIExplanation() {
@@ -784,6 +792,27 @@ function displayExplanation(explanation) {
   if (explanationContent) {
     explanationContent.innerHTML = explanation.replace(/\n/g, '<br>');
   }
+}
+
+function renderSuggestions(suggestions) {
+  const container = document.getElementById('suggested-reading');
+  const content = document.getElementById('suggested-reading-content');
+  const loading = document.getElementById('suggested-reading-loading');
+  if (!container || !content) return;
+  container.classList.remove('d-none');
+  if (loading) loading.classList.add('d-none');
+  if (!Array.isArray(suggestions) || suggestions.length === 0) {
+    content.innerHTML = '<div class="alert alert-warning">No suggestions returned.</div>';
+    return;
+  }
+  const items = suggestions.map((s) => {
+    const title = s.title || 'Resource';
+    const type = s.type ? `<span class="badge bg-secondary ms-2">${s.type}</span>` : '';
+    const notes = s.notes ? `<div class="small text-muted">${s.notes}</div>` : '';
+    const link = s.link ? `<a href="${s.link}" target="_blank" rel="noopener">${s.link}</a>` : '';
+    return `<li class="mb-2"><strong>${title}</strong> ${type}<br>${notes}${link ? '<div>' + link + '</div>' : ''}</li>`;
+  }).join('');
+  content.innerHTML = `<ul class="mb-0 ps-3">${items}</ul>`;
 }
 
 async function getAIExplanation() {
@@ -834,7 +863,11 @@ async function getAIExplanation() {
       const errorData = await response.json();
       throw new Error(errorData.error || 'Failed to get AI explanation');
     }
-    
+    const ct = response.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      const text = await response.text();
+      throw new Error('Unexpected non-JSON response: ' + text.slice(0, 60));
+    }
     const data = await response.json();
     
     // Hide loading and display explanation
@@ -926,6 +959,33 @@ function initializeAIHelp() {
     console.error('AI help button not found - this will prevent the feature from working!');
   }
   
+  // Suggested reading button
+  const readingBtn = document.getElementById('get-suggested-reading');
+  if (readingBtn) {
+    readingBtn.addEventListener('click', async () => {
+      try {
+        const questionElement = document.getElementById('question');
+        const answerDisplay = document.getElementById('answer-display');
+        const question = questionElement?.textContent?.trim() || '';
+        const rawAnswerText = answerDisplay?.textContent?.trim() || '';
+        const answer = rawAnswerText.replace(/^ANSWER:\\s*/i, '');
+        const resp = await fetch('/api/ai-help/suggest-reading', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question, answer, category: getCurrentCategory() })
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.error || 'Failed to get suggestions');
+        }
+        const data = await resp.json();
+        renderSuggestions(data.suggestions);
+      } catch (e) {
+        console.error('Failed to get suggested reading:', e);
+      }
+    });
+  }
+
   // Add event listener for test button
   const testButton = document.getElementById('test-ai-help');
   console.log('Test button element:', testButton);
