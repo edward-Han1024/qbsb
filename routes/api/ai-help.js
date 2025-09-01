@@ -16,7 +16,7 @@ router.use(aiHelpRateLimit);
 
 router.post('/explain', async (req, res) => {
   try {
-    const { question, answer, category } = req.body;
+    const { question, answer, category, options, isMcq } = req.body;
     
     if (!question || !answer) {
       return res.status(400).json({ 
@@ -32,21 +32,27 @@ router.post('/explain', async (req, res) => {
       });
     }
 
+    // Build optional options text if multiple-choice data provided
+    const hasOptions = Array.isArray(options) && options.length > 0;
+    const optionsText = hasOptions
+      ? `\nOptions:\n${options.map((opt, i) => `${opt}`).join('\n')}`
+      : '';
+
     // Construct the prompt for OpenAI
     const prompt = `You are a helpful science tutor. A student is asking for help understanding a Science Bowl question.
 
 Question: ${question}
 Correct Answer: ${answer}
-Category: ${category || 'Science'}
+Category: ${category || 'Science'}${optionsText}
 
 Please provide a clear, educational explanation that:
 1. Explains the scientific concept(s) involved
-2. Helps the student understand why this answer is correct
-3. Provides additional context that might be helpful for similar questions
+2. Helps the student understand why the correct answer is correct
+3. Provides additional context helpful for similar questions
 4. Uses language appropriate for high school students
-5. Is concise but thorough (aim for 2-3 paragraphs)
+5. Is concise but thorough (aim for about 2 paragraphs)
 
-Focus on helping the student learn, not just memorize the answer.`;
+${hasOptions || isMcq ? `Also, a short section titled "Why the other options are wrong:" with one bullet per incorrect option. For each, briefly (1 sentence) explain the misconception or why it does not apply. Use the option letter and text if provided.` : ''}`;
 
     // Make request to OpenAI
     const response = await fetch('https://api.openai.com/v1/chat/completions', {

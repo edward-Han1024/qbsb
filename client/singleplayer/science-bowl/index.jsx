@@ -802,6 +802,10 @@ async function getAIExplanation() {
     const rawAnswerText = answerDisplay.textContent.trim();
     const answer = rawAnswerText.replace(/^ANSWER:\s*/i, '');
     
+    // Include MCQ options if available from room state
+    const isMcq = !!(window.room?.tossup?.is_mcq && Array.isArray(window.room?.tossup?.options));
+    const options = isMcq ? window.room.tossup.options : undefined;
+    
     if (!question || !answer) {
       alert('Please wait for the question to be fully loaded and answered before requesting AI help.');
       return;
@@ -820,7 +824,9 @@ async function getAIExplanation() {
       body: JSON.stringify({
         question: question,
         answer: answer,
-        category: getCurrentCategory()
+        category: getCurrentCategory(),
+        isMcq,
+        options
       })
     });
     

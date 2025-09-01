@@ -589,6 +589,13 @@
             const question = (qEl.textContent || '').trim();
             const rawAnswer = (aEl.textContent || '').trim();
             const answer = rawAnswer.replace(/^ANSWER:\\s*/i, '');
+            // Pull MCQ options from room state if present
+            let isMcq = false;
+            let options = undefined;
+            try {
+              isMcq = !!(window.room && room.tossup && room.tossup.is_mcq && Array.isArray(room.tossup.options));
+              options = isMcq ? room.tossup.options : undefined;
+            } catch (_) {}
             if (!question || !answer) {
               console.warn('[SBAI] Missing question or answer. q:', !!question, 'a:', !!answer);
               return;
@@ -598,7 +605,7 @@
             const resp = await fetch('/api/ai-help/explain', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ question, answer, category: sbGetCurrentCategory() })
+              body: JSON.stringify({ question, answer, category: sbGetCurrentCategory(), isMcq, options })
             });
             if (!resp.ok) {
               const err = await resp.json().catch(() => ({}));
