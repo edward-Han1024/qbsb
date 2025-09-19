@@ -850,6 +850,12 @@ async function getAIExplanation() {
     // Strip the leading "ANSWER:" label if present before sending to API
     const rawAnswerText = answerDisplay.textContent.trim();
     const answer = rawAnswerText.replace(/^ANSWER:\s*/i, '');
+    // Also capture the user's answer if present
+    const userAnswerEl = document.getElementById('user-answer');
+    const rawUserAnswer = userAnswerEl?.textContent?.trim() || '';
+    const userAnswer = rawUserAnswer.replace(/^YOUR ANSWER:\s*/i, '');
+    // Try to detect last correctness from room state
+    const userIsCorrect = (window.room?.previous?.isCorrect === true);
     
     // Include MCQ options if available from room state
     const isMcq = !!(window.room?.tossup?.is_mcq && Array.isArray(window.room?.tossup?.options));
@@ -875,7 +881,9 @@ async function getAIExplanation() {
         answer: answer,
         category: getCurrentCategory(),
         isMcq,
-        options
+        options,
+        userAnswer,
+        userIsCorrect
       })
     });
     

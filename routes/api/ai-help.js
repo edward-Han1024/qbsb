@@ -21,7 +21,7 @@ router.get('/health', (_req, res) => {
 
 router.post('/explain', async (req, res) => {
   try {
-    const { question, answer, category, options, isMcq } = req.body;
+    const { question, answer, category, options, isMcq, userAnswer, userIsCorrect } = req.body;
 
     if (!question || !answer) {
       return res.status(400).json({ error: 'Question and answer are required' });
@@ -40,6 +40,8 @@ router.post('/explain', async (req, res) => {
 Question: ${question}
 Correct Answer: ${answer}
 Category: ${category || 'Science'}${optionsText}
+${userAnswer ? `User Answer: ${userAnswer}
+User Answer Correct?: ${userIsCorrect === true ? 'Yes' : userIsCorrect === false ? 'No' : 'Unknown'}` : ''}
 
 Please provide a clear, educational explanation that:
 1. Explains the scientific concept(s) involved
@@ -48,7 +50,8 @@ Please provide a clear, educational explanation that:
 4. Uses language appropriate for high school students
 5. Is concise but thorough (aim for about 2 paragraphs)
 
-${hasOptions || isMcq ? `Also, a short section titled "Why the other options are wrong:" with one bullet per incorrect option. For each, briefly (1 sentence) explain the misconception or why it does not apply. Use the option letter and text if provided.` : ''}`;
+${hasOptions || isMcq ? `Also, a short section titled "Why the other options are wrong:" with one bullet per incorrect option. For each, briefly (1 sentence) explain the misconception or why it does not apply. Use the option letter and text if provided.` : ''}
+${userAnswer ? `If the user's answer is incorrect, add a brief section titled "Why your answer is incorrect:" with 1–2 sentences explaining the mistake or misconception, and (if helpful) how it differs from the correct answer.` : ''}`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -79,20 +82,33 @@ ${hasOptions || isMcq ? `Also, a short section titled "Why the other options are
       return res.status(500).json({ error: 'No explanation received from AI' });
     }
 
-    // Verification/refinement step: ask the model to check accuracy and fix issues
+    // Aggressive two-pass verification:
+    // 1) Editor critique that tries to find issues
+    // 2) If issues found, editor fix that returns corrected explanation text
     let finalExplanation = explanation;
+    let verification = null;
     try {
-      const verifyPrompt = `Review the following explanation for scientific accuracy, clarity, and alignment with the correct answer${hasOptions ? ' and the provided multiple-choice options' : ''}. If there are inaccuracies or unclear parts, correct them. Keep the format readable for high-school students. If a section "Why the other options are wrong" is present, keep it and correct any mistaken bullets.
+      const critiquePrompt = `Are you sure this is correct? Imagine you are a Science Bowl editor verifying an explanation.
+Your job is to find factual inaccuracies, unclear phrasing, misalignment with the correct answer, or style issues.
+If nothing is wrong, say so in the JSON. Be adversarial and precise.
 
 Question: ${question}
 Correct Answer: ${answer}
 Category: ${category || 'Science'}${optionsText}
+${typeof userAnswer === 'string' && userAnswer.length > 0 ? `User Answer: ${userAnswer}` : ''}
 
-Explanation to review:\n\n${explanation}
+Explanation under review:\n\n${explanation}
 
-Return only the final corrected explanation text. Do not include any extra commentary, JSON, or markdown fences.`;
+Return strict JSON with this exact shape and no extra commentary:
+{
+  "needs_changes": true,
+  "issues": [
+    { "type": "factual|clarity|alignment|style|mcq-other-options|user-answer", "description": "...", "fix_suggestion": "..." }
+  ],
+  "summary": "one-paragraph overview of concerns or 'No issues found.'"
+}`;
 
-      const verifyResp = await fetch('https://api.openai.com/v1/chat/completions', {
+      const critiqueResp = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${openaiApiKey}`,
@@ -101,24 +117,83 @@ Return only the final corrected explanation text. Do not include any extra comme
         body: JSON.stringify({
           model: 'gpt-3.5-turbo',
           messages: [
-            { role: 'system', content: 'You carefully verify science explanations and output only the corrected explanation text.' },
-            { role: 'user', content: verifyPrompt }
+            { role: 'system', content: 'You are a rigorous Science Bowl editor. Return JSON only.' },
+            { role: 'user', content: critiquePrompt }
           ],
-          max_tokens: 600,
-          temperature: 0.2
+          max_tokens: 700,
+          temperature: 0.1
         })
       });
 
-      if (verifyResp.ok) {
-        const verifyData = await verifyResp.json();
-        const corrected = verifyData.choices?.[0]?.message?.content?.trim();
-        if (corrected) { finalExplanation = corrected; }
+      let needsChanges = false;
+      let issues = [];
+      let summary = '';
+      if (critiqueResp.ok) {
+        const critiqueData = await critiqueResp.json();
+        const critiqueContent = critiqueData.choices?.[0]?.message?.content?.trim();
+        try {
+          const critiqueParsed = JSON.parse(critiqueContent);
+          needsChanges = !!critiqueParsed?.needs_changes;
+          issues = Array.isArray(critiqueParsed?.issues) ? critiqueParsed.issues : [];
+          summary = typeof critiqueParsed?.summary === 'string' ? critiqueParsed.summary : '';
+        } catch {}
+      }
+
+      // Derive simple checks from critique
+      const types = new Set(issues.map(i => i?.type));
+      verification = {
+        editor: { needs_changes: needsChanges, issues, summary },
+        checks: {
+          is_factual: !types.has('factual'),
+          is_clear: !types.has('clarity'),
+          aligned_with_answer: !types.has('alignment')
+        }
+      };
+
+      if (needsChanges) {
+        const fixPrompt = `You are a Science Bowl editor. Using the critique below, produce a corrected explanation.
+Preserve useful structure (e.g., sections like "Why the other options are wrong" and "Why your answer is incorrect") but fix inaccuracies and clarity issues.
+Keep the tone and level appropriate for high-school students. Output only the final corrected explanation text.
+
+Question: ${question}
+Correct Answer: ${answer}
+Category: ${category || 'Science'}${optionsText}
+${typeof userAnswer === 'string' && userAnswer.length > 0 ? `User Answer: ${userAnswer}` : ''}
+
+Current Explanation:\n${explanation}
+
+Critique JSON:\n${JSON.stringify({ needs_changes: needsChanges, issues, summary })}`;
+
+        const fixResp = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${openaiApiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: 'gpt-3.5-turbo',
+            messages: [
+              { role: 'system', content: 'You produce only the corrected explanation text. No JSON.' },
+              { role: 'user', content: fixPrompt }
+            ],
+            max_tokens: 800,
+            temperature: 0.2
+          })
+        });
+
+        if (fixResp.ok) {
+          const fixData = await fixResp.json();
+          const correctedText = fixData.choices?.[0]?.message?.content?.trim();
+          if (correctedText) {
+            finalExplanation = correctedText;
+          }
+        }
       }
     } catch (err) {
-      console.warn('Explanation verification step failed; returning original text:', err?.message || err);
+      console.warn('Explanation aggressive verification failed; returning best available text:', err?.message || err);
     }
 
-    res.json({ explanation: finalExplanation, model: data.model, usage: data.usage });
+    res.json({ explanation: finalExplanation, verification, model: data.model, usage: data.usage });
   } catch (error) {
     console.error('AI help error (explain):', error);
     res.status(500).json({ error: 'Internal server error', details: error.message });
@@ -280,6 +355,7 @@ Known correct answer (context): ${answer || 'N/A'}
 
 Generated practice set JSON to verify (problems array):\n${JSON.stringify(parsed.problems)}
 
+You are a science bowl editor. You have been given a list of questions. Your job is to make sure that they are viable for competition use.
 Tasks:
 1. Check each problem's scientific accuracy, internal consistency, and alignment with the core concept of the original question.
 2. Ensure the answer matches the question and the explanation supports the answer.

@@ -740,7 +740,15 @@
             const resp = await fetch('/api/ai-help/explain', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ question, answer, category: sbGetCurrentCategory(), isMcq, options })
+              body: JSON.stringify({ 
+                question, 
+                answer, 
+                category: sbGetCurrentCategory(), 
+                isMcq, 
+                options,
+                userAnswer: (document.getElementById('user-answer')?.textContent || '').replace(/^YOUR ANSWER:\\s*/i, '').trim(),
+                userIsCorrect: (window.room && room.previous && room.previous.isCorrect === true)
+              })
             });
             if (!resp.ok) {
               const err = await resp.json().catch(() => ({}));
