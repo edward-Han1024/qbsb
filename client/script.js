@@ -21,3 +21,44 @@ account.getUsername().then(username => {
     document.getElementById('login-link').href = '/user/my-profile';
   }
 });
+
+// UI customizations for SBReader branding and simplified navbar
+try {
+  // Update brand from QBReader -> SBReader
+  const prefix = document.querySelector('#logo .logo-prefix');
+  const suffix = document.querySelector('#logo .logo-suffix');
+  if (prefix) prefix.textContent = 'SB';
+  if (suffix) suffix.textContent = 'Reader';
+
+  // Normalize login text to "Login" when not authenticated
+  const loginLink = document.getElementById('login-link');
+  if (loginLink && loginLink.textContent.trim().toLowerCase() === 'log in') {
+    loginLink.textContent = 'Login';
+  }
+
+  // Reduce top navbar options to only Single Player and Multiplayer
+  const nav = document.querySelector('#navbarSupportedContent .navbar-nav.me-auto');
+  if (nav) {
+    // Clear existing children
+    while (nav.firstChild) nav.removeChild(nav.firstChild);
+
+    const links = [
+      { href: '/singleplayer/', text: 'Single Player' },
+      { href: '/multiplayer/', text: 'Multiplayer' }
+    ];
+
+    for (const { href, text } of links) {
+      const a = document.createElement('a');
+      a.className = 'nav-link';
+      a.href = href;
+      a.textContent = text;
+      if (window.location.pathname.startsWith(href)) {
+        a.classList.add('active');
+        a.setAttribute('aria-current', 'page');
+      }
+      nav.appendChild(a);
+    }
+  }
+} catch (e) {
+  // Fail silently if structure differs on some pages
+}
