@@ -236,6 +236,7 @@ Adjudication rules:
 - For numeric answers, allow rounding and equivalent forms; units must be compatible if required by the canonical answer.
 - If canonical answer is a specific term and the student answer is more general/vague, do NOT accept unless it clearly and unambiguously means the same thing.
 - If the student gives a different concept or an incorrect qualifier, mark not equivalent.
+- If the student gives an equivalent ranking for ranking questions, except with the actual text instead of the numbers, mark it as correct.
 
 Return strict JSON only with this exact shape and booleans, no extra commentary. Keep justification very short (<= 25 words):
 {
@@ -379,8 +380,41 @@ Prefer stable, non-paywalled links when possible.`;
     let parsed;
     try {
       parsed = JSON.parse(content);
-    } catch {
-      parsed = { suggestions: [{ title: 'Suggested Reading', type: 'list', link: '', notes: content.trim() }] };
+    } catch (parseError) {
+      console.warn('[AI-HELP] JSON parse failed for suggest-reading, attempting fallback parsing:', parseError.message);
+      console.warn('[AI-HELP] Raw content that failed to parse:', content.substring(0, 200) + (content.length > 200 ? '...' : ''));
+      // Try to handle cases where the AI returns just an array or malformed JSON
+      let suggestions = [];
+      try {
+        // First, try to parse as a direct array
+        const arrayParsed = JSON.parse(content);
+        if (Array.isArray(arrayParsed)) {
+          suggestions = arrayParsed;
+        }
+      } catch {
+        // If that fails, try to extract JSON array from the content
+        const arrayMatch = content.match(/\[[\s\S]*\]/);
+        if (arrayMatch) {
+          try {
+            const arrayParsed = JSON.parse(arrayMatch[0]);
+            if (Array.isArray(arrayParsed)) {
+              suggestions = arrayParsed;
+            }
+          } catch {}
+        }
+      }
+      
+      // If we still don't have suggestions, create a fallback
+      if (suggestions.length === 0) {
+        suggestions = [{ 
+          title: 'Suggested Reading', 
+          type: 'text', 
+          link: '', 
+          notes: content.trim().length > 200 ? content.trim().substring(0, 200) + '...' : content.trim()
+        }];
+      }
+      
+      parsed = { suggestions };
     }
 
     if (!parsed || !Array.isArray(parsed.suggestions)) {

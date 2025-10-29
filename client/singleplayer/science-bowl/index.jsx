@@ -96,7 +96,10 @@ function buzz ({ timer, userId, username }) {
   if (userId !== USER_ID) { return; }
 
   document.getElementById('pause').disabled = true;
-  const typeToAnswer = document.getElementById('type-to-answer').checked;
+  const typeToAnswer = (function () {
+    const el = document.getElementById('type-to-answer');
+    return el ? el.checked : true; // default to enabled if control absent
+  })();
   if (typeToAnswer) {
     document.getElementById('answer-input-group').classList.remove('d-none');
     document.getElementById('answer-input').focus();
@@ -355,8 +358,10 @@ function setDifficulties ({ difficulties }) {
 }
 
 function setStrictness ({ strictness }) {
-  document.getElementById('set-strictness').value = strictness;
-  document.getElementById('strictness-display').textContent = strictness;
+  const el = document.getElementById('set-strictness');
+  const disp = document.getElementById('strictness-display');
+  if (el) el.value = strictness;
+  if (disp) disp.textContent = strictness;
   window.localStorage.setItem('singleplayer-science-bowl-settings', JSON.stringify({ ...room.settings, version: settingsVersion }));
 }
 
@@ -366,8 +371,10 @@ function setPacketNumbers ({ packetNumbers }) {
 }
 
 function setReadingSpeed ({ readingSpeed }) {
-  document.getElementById('reading-speed').value = readingSpeed;
-  document.getElementById('reading-speed-display').textContent = readingSpeed;
+  const el = document.getElementById('reading-speed');
+  const disp = document.getElementById('reading-speed-display');
+  if (el) el.value = readingSpeed;
+  if (disp) disp.textContent = readingSpeed;
   window.localStorage.setItem('singleplayer-science-bowl-settings', JSON.stringify({ ...room.settings, version: settingsVersion }));
 }
 
@@ -392,8 +399,8 @@ function toggleAiMode ({ aiMode }) {
   if (aiMode) { upsertPlayerItem(aiBot.player); }
 
   aiBot.active = aiMode;
-  document.getElementById('ai-settings').disabled = !aiMode;
-  document.getElementById('toggle-ai-mode').checked = aiMode;
+  const aiSettingsBtn = document.getElementById('ai-settings'); if (aiSettingsBtn) aiSettingsBtn.disabled = !aiMode;
+  const aiToggle = document.getElementById('toggle-ai-mode'); if (aiToggle) aiToggle.checked = aiMode;
   document.getElementById('player-list-group').classList.toggle('d-none', !aiMode);
   document.getElementById('player-list-group-hr').classList.toggle('d-none', !aiMode);
   window.localStorage.setItem('singleplayer-science-bowl-settings', JSON.stringify({ ...room.settings, version: settingsVersion }));
@@ -410,7 +417,7 @@ function togglePowermarkOnly ({ powermarkOnly }) {
 }
 
 function toggleRebuzz ({ rebuzz }) {
-  document.getElementById('toggle-rebuzz').checked = rebuzz;
+  const el = document.getElementById('toggle-rebuzz'); if (el) el.checked = rebuzz;
   window.localStorage.setItem('singleplayer-science-bowl-settings', JSON.stringify({ ...room.settings, version: settingsVersion }));
 }
 
@@ -422,15 +429,15 @@ function setMode ({ mode, setName }) {
   document.getElementById('toggle-powermark-only').disabled = mode === 'local packet';
   document.getElementById('toggle-standard-only').disabled = mode === 'local packet';
   document.getElementById('category-select-button').disabled = mode === 'local packet';
-  document.getElementById('ai-settings').disabled = mode === 'local packet' || !room.settings.aiMode;
-  document.getElementById('toggle-ai-mode').disabled = mode === 'local packet';
+  const aiSettingsBtn2 = document.getElementById('ai-settings'); if (aiSettingsBtn2) aiSettingsBtn2.disabled = mode === 'local packet' || !room.settings.aiMode;
+  const aiToggle2 = document.getElementById('toggle-ai-mode'); if (aiToggle2) aiToggle2.disabled = mode === 'local packet';
   document.getElementById('clear-stats').disabled = mode === 'local packet';
   document.getElementById('set-name').value = setName || '';
   window.localStorage.setItem('singleplayer-science-bowl-mode', JSON.stringify({ mode, setName, version: modeVersion }));
 }
 
 function toggleShowHistory ({ showHistory }) {
-  document.getElementById('toggle-show-history').checked = showHistory;
+  const el = document.getElementById('toggle-show-history'); if (el) el.checked = showHistory;
   document.getElementById('room-history').classList.toggle('d-none', !showHistory);
   window.localStorage.setItem('singleplayer-science-bowl-settings', JSON.stringify({ ...room.settings, version: settingsVersion }));
 }
@@ -441,12 +448,12 @@ function toggleStandardOnly ({ standardOnly }) {
 }
 
 function toggleTimer ({ timer }) {
-  document.getElementById('toggle-timer').checked = timer;
+  const el = document.getElementById('toggle-timer'); if (el) el.checked = timer;
   window.localStorage.setItem('singleplayer-science-bowl-settings', JSON.stringify({ ...room.settings, version: settingsVersion }));
 }
 
 function toggleTypeToAnswer ({ typeToAnswer }) {
-  document.getElementById('type-to-answer').checked = typeToAnswer;
+  const el = document.getElementById('type-to-answer'); if (el) el.checked = typeToAnswer;
   window.localStorage.setItem('singleplayer-science-bowl-settings', JSON.stringify({ ...room.settings, version: settingsVersion }));
 }
 
@@ -532,15 +539,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const settings = JSON.parse(savedSettings);
     if (settings.version === settingsVersion) {
       room.settings = { ...room.settings, ...settings };
-      document.getElementById('toggle-ai-mode').checked = room.settings.aiMode;
-      document.getElementById('toggle-rebuzz').checked = room.settings.rebuzz;
-      document.getElementById('toggle-show-history').checked = room.settings.showHistory;
-      document.getElementById('toggle-timer').checked = room.settings.timer;
-      document.getElementById('type-to-answer').checked = room.settings.typeToAnswer;
-      document.getElementById('set-strictness').value = room.settings.strictness;
-      document.getElementById('strictness-display').textContent = room.settings.strictness;
-      document.getElementById('reading-speed').value = room.settings.readingSpeed;
-      document.getElementById('reading-speed-display').textContent = room.settings.readingSpeed;
+      const elAi = document.getElementById('toggle-ai-mode'); if (elAi) elAi.checked = room.settings.aiMode;
+      const elReb = document.getElementById('toggle-rebuzz'); if (elReb) elReb.checked = room.settings.rebuzz;
+      const elHist = document.getElementById('toggle-show-history'); if (elHist) elHist.checked = room.settings.showHistory;
+      const elTim = document.getElementById('toggle-timer'); if (elTim) elTim.checked = room.settings.timer;
+      const elType = document.getElementById('type-to-answer'); if (elType) elType.checked = room.settings.typeToAnswer;
+      const elStrict = document.getElementById('set-strictness'); if (elStrict) elStrict.value = room.settings.strictness;
+      const elStrictDisp = document.getElementById('strictness-display'); if (elStrictDisp) elStrictDisp.textContent = room.settings.strictness;
+      const elSpeed = document.getElementById('reading-speed'); if (elSpeed) elSpeed.value = room.settings.readingSpeed;
+      const elSpeedDisp = document.getElementById('reading-speed-display'); if (elSpeedDisp) elSpeedDisp.textContent = room.settings.readingSpeed;
     }
   }
 
@@ -651,33 +658,54 @@ document.addEventListener('DOMContentLoaded', () => {
     room.message(USER_ID, { type: 'toggle-correct' });
   });
 
-  document.getElementById('toggle-ai-mode').addEventListener('change', (e) => {
-    room.message(USER_ID, { type: 'toggle-ai-mode', aiMode: e.target.checked });
-  });
+  const elToggleAI = document.getElementById('toggle-ai-mode');
+  if (elToggleAI) {
+    elToggleAI.addEventListener('change', (e) => {
+      room.message(USER_ID, { type: 'toggle-ai-mode', aiMode: e.target.checked });
+    });
+  }
 
-  document.getElementById('toggle-rebuzz').addEventListener('change', (e) => {
-    room.message(USER_ID, { type: 'toggle-rebuzz', rebuzz: e.target.checked });
-  });
+  const elRebuzz = document.getElementById('toggle-rebuzz');
+  if (elRebuzz) {
+    elRebuzz.addEventListener('change', (e) => {
+      room.message(USER_ID, { type: 'toggle-rebuzz', rebuzz: e.target.checked });
+    });
+  }
 
-  document.getElementById('toggle-show-history').addEventListener('change', (e) => {
-    room.message(USER_ID, { type: 'toggle-show-history', showHistory: e.target.checked });
-  });
+  const elShowHistory = document.getElementById('toggle-show-history');
+  if (elShowHistory) {
+    elShowHistory.addEventListener('change', (e) => {
+      room.message(USER_ID, { type: 'toggle-show-history', showHistory: e.target.checked });
+    });
+  }
 
-  document.getElementById('toggle-timer').addEventListener('change', (e) => {
-    room.message(USER_ID, { type: 'toggle-timer', timer: e.target.checked });
-  });
+  const elTimer = document.getElementById('toggle-timer');
+  if (elTimer) {
+    elTimer.addEventListener('change', (e) => {
+      room.message(USER_ID, { type: 'toggle-timer', timer: e.target.checked });
+    });
+  }
 
-  document.getElementById('type-to-answer').addEventListener('change', (e) => {
-    room.message(USER_ID, { type: 'toggle-type-to-answer', typeToAnswer: e.target.checked });
-  });
+  const elTypeToAnswer = document.getElementById('type-to-answer');
+  if (elTypeToAnswer) {
+    elTypeToAnswer.addEventListener('change', (e) => {
+      room.message(USER_ID, { type: 'toggle-type-to-answer', typeToAnswer: e.target.checked });
+    });
+  }
 
-  document.getElementById('set-strictness').addEventListener('input', (e) => {
-    room.message(USER_ID, { type: 'set-strictness', strictness: parseInt(e.target.value) });
-  });
+  const elStrictness = document.getElementById('set-strictness');
+  if (elStrictness) {
+    elStrictness.addEventListener('input', (e) => {
+      room.message(USER_ID, { type: 'set-strictness', strictness: parseInt(e.target.value) });
+    });
+  }
 
-  document.getElementById('reading-speed').addEventListener('input', (e) => {
-    room.message(USER_ID, { type: 'set-reading-speed', readingSpeed: parseInt(e.target.value) });
-  });
+  const elReadingSpeed = document.getElementById('reading-speed');
+  if (elReadingSpeed) {
+    elReadingSpeed.addEventListener('input', (e) => {
+      room.message(USER_ID, { type: 'set-reading-speed', readingSpeed: parseInt(e.target.value) });
+    });
+  }
 
   // Add pause button handler
   document.getElementById('pause').addEventListener('click', () => {
