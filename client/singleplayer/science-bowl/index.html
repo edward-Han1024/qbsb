@@ -76,6 +76,42 @@
         .dark #explanation-content {
             color: #e2e8f0;
         }
+        
+        /* Subject Statistics Table - Bottom Right Corner */
+        #subject-stats-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            max-width: 400px;
+            background-color: white;
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 15px;
+        }
+        
+        .dark #subject-stats-container {
+            background-color: #2d3748;
+            border-color: #4a5568;
+        }
+        
+        #subject-stats-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        #subject-stats-table-container {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        #subject-stats-container table {
+            margin-bottom: 0;
+        }
+        
     </style>
 </head>
 
@@ -199,10 +235,12 @@
                                 of <span id="packet-length-info">-</span>
                             </b>
                         </span>
-                        <!-- Debug button for testing AI help -->
-                        <button type="button" class="btn btn-warning btn-sm" id="test-ai-help">
-                            Test AI Help
-                        </button>
+                        <div class="d-flex gap-2">
+                            <!-- Debug button for testing AI help -->
+                            <button type="button" class="btn btn-warning btn-sm" id="test-ai-help">
+                                Test AI Help
+                            </button>
+                        </div>
                     </div>
                     <div id="question" class="mb-3"></div>
                     <div id="answer-display" class="mb-3"></div>
@@ -825,9 +863,11 @@
             sbRenderPleadResult(!!data.equivalent, data.justification || data.rationale || '');
 
             if (data.equivalent) {
+              const tossupId = (window.room?.previous?.tossup?._id) || (window.room?.tossup?._id) || null;
+              const wasAlreadyCorrected = tossupId && window.sbCorrectedTossupIds?.has(tossupId);
               // Credit the user once if they were previously incorrect
               try {
-                if (window.room && room.previous && room.previous.isCorrect === false) {
+                if (!wasAlreadyCorrected && window.room && room.previous && room.previous.isCorrect === false) {
                   room.previous.isCorrect = true;
                   if (typeof window.updateStatDisplay === 'function') {
                     window.updateStatDisplay();
@@ -839,6 +879,16 @@
                 // Hide the button once credit has been granted to avoid duplicates
                 btn.classList.add('d-none');
               }
+
+              const statSubject = window.room?.previous?.tossup?.subject || window.room?.tossup?.subject || '';
+              if (typeof window.sbRecordSessionStat === 'function') {
+                window.sbRecordSessionStat({
+                  subject: statSubject,
+                  adjustment: window.sbSessionStatWrongToCorrect || 'wrong-to-correct',
+                  tossupId
+                });
+              }
+              window.refreshScienceBowlSubjectStats?.();
             } else {
               if (btn) btn.textContent = 'Not accepted';
             }
@@ -1482,7 +1532,268 @@
                 toggleCorrectButton.textContent = room.previous.isCorrect ? 'I was wrong' : 'I was right';
             }
         }
+
+        // Subject Statistics Functions
+        (function initializeSubjectStats () {
+            const container = document.getElementById('subject-stats-container');
+            const statsBody = document.getElementById('subject-stats-body');
+            const refreshButton = document.getElementById('refresh-subject-stats');
+            let loading = false;
+
+            if (!container || !statsBody) {
+                console.error('Subject stats elements not found');
+                return;
+            }
+
+            function setLoadingState () {
+                statsBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Loading stats...</td></tr>';
+                if (refreshButton) {
+                    refreshButton.disabled = true;
+                    refreshButton.textContent = 'Loading...';
+                }
+            }
+
+            function setErrorState (message, muted = false) {
+                statsBody.innerHTML = `<tr><td colspan="5" class="text-center ${muted ? 'text-muted' : 'text-danger'}">${message}</td></tr>`;
+            }
+
+            function finishLoading () {
+                if (refreshButton) {
+                    refreshButton.disabled = false;
+                    refreshButton.textContent = 'Refresh';
+                }
+            }
+
+            async function fetchSubjectStats () {
+                const authResponse = await fetch('/auth/user-stats/science-bowl-subjects');
+                if (authResponse.ok) {
+                    const data = await authResponse.json();
+                    console.log('[SB Stats] Received account stats', data);
+                    return data.stats;
+                }
+
+                if (authResponse.status === 401) {
+                    const sessionResponse = await fetch('/api/science-bowl/session-stats');
+                    if (sessionResponse.ok) {
+                        const data = await sessionResponse.json();
+                        console.log('[SB Stats] Using session stats', data);
+                        return data.stats;
+                    }
+                    throw new Error('Session stats unavailable');
+                }
+
+                throw new Error(`Auth stats request failed (${authResponse.status})`);
+            }
+
+            async function loadSubjectStats () {
+                if (loading) { return; }
+                loading = true;
+                setLoadingState();
+
+                try {
+                    const stats = await fetchSubjectStats();
+                    const normalizedStats = Array.isArray(stats) ? stats : [];
+
+                    if (normalizedStats.length === 0) {
+                        setErrorState('No questions recorded yet', true);
+                    } else {
+                        let totalQuestions = 0;
+                        let totalCorrect = 0;
+                        let totalWrong = 0;
+
+                        const rows = normalizedStats.map((stat) => {
+                            totalQuestions += stat.total;
+                            totalCorrect += stat.correct;
+                            totalWrong += stat.wrong;
+                            const accuracy = stat.total > 0 ? ((stat.correct / stat.total) * 100).toFixed(1) : '0.0';
+                            return `
+                                <tr>
+                                    <th scope="row">${stat.subject}</th>
+                                    <td>${stat.total}</td>
+                                    <td>${stat.correct}</td>
+                                    <td>${stat.wrong}</td>
+                                    <td>${accuracy}%</td>
+                                </tr>
+                            `;
+                        });
+
+                        const totalAccuracy = totalQuestions > 0 ? ((totalCorrect / totalQuestions) * 100).toFixed(1) : '0.0';
+                        rows.push(`
+                            <tr class="table-info">
+                                <th scope="row"><strong>Total</strong></th>
+                                <td><strong>${totalQuestions}</strong></td>
+                                <td><strong>${totalCorrect}</strong></td>
+                                <td><strong>${totalWrong}</strong></td>
+                                <td><strong>${totalAccuracy}%</strong></td>
+                            </tr>
+                        `);
+
+                        statsBody.innerHTML = rows.join('');
+                    }
+                } catch (error) {
+                    console.error('[SB Stats] Error fetching subject stats:', error);
+                    const message = error?.message ?? 'Unknown error';
+                    const isAuthError = /log in/i.test(message);
+                    setErrorState(isAuthError ? 'Please log in to view statistics' : `Error: ${message}`, isAuthError);
+                } finally {
+                    loading = false;
+                    finishLoading();
+                }
+            }
+
+            refreshButton?.addEventListener('click', loadSubjectStats);
+            loadSubjectStats();
+
+            window.refreshScienceBowlSubjectStats = function refreshScienceBowlSubjectStats () {
+                loadSubjectStats();
+            };
+        })();
+
+        // Inline Science Bowl session stat recorder
+        (function initializeSessionStatRecorder () {
+            const WRONG_TO_CORRECT = 'wrong-to-correct';
+            if (!window.sbCorrectedTossupIds) {
+                window.sbCorrectedTossupIds = new Set();
+            }
+            if (typeof window.sbLastRecordedTossupId === 'undefined') {
+                window.sbLastRecordedTossupId = null;
+            }
+
+            function log (...args) {
+                console.log('[SB Session Stats]', ...args);
+            }
+
+            function recordSessionStat ({ subject, isCorrect, adjustment, tossupId } = {}) {
+                if (!subject) {
+                    log('Skipping stat update - no subject', { isCorrect, adjustment });
+                    return;
+                }
+
+                if (!adjustment && tossupId) {
+                    if (window.sbLastRecordedTossupId === tossupId) {
+                        log('Skipping duplicate stat update for tossup', { tossupId });
+                        return;
+                    }
+                    window.sbLastRecordedTossupId = tossupId;
+                }
+
+                if (adjustment === WRONG_TO_CORRECT && tossupId) {
+                    if (window.sbCorrectedTossupIds.has(tossupId)) {
+                        log('Skipping duplicate correction for tossup', { tossupId });
+                        return;
+                    }
+                    window.sbCorrectedTossupIds.add(tossupId);
+                }
+
+                const normalizedSubject = subject.toUpperCase();
+                log('Recording stat', { subject: normalizedSubject, originalSubject: subject, isCorrect, adjustment, tossupId });
+
+                const payload = adjustment
+                    ? { subject: normalizedSubject, adjustment }
+                    : { subject: normalizedSubject, isCorrect };
+
+                fetch('/api/science-bowl/session-stats', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                })
+                    .then(async response => {
+                        log('Response received', { status: response.status });
+                        if (!response.ok) {
+                            const errorText = await response.text();
+                            throw new Error(`Failed (${response.status}): ${errorText}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        log('Session stats updated', data);
+                        window.refreshScienceBowlSubjectStats?.();
+                    })
+                    .catch(error => {
+                        console.error('[SB Session Stats] Error recording stat', { error, subject: normalizedSubject, isCorrect, adjustment, tossupId });
+                    });
+            }
+
+            window.sbRecordSessionStat = recordSessionStat;
+            window.sbSessionStatWrongToCorrect = WRONG_TO_CORRECT;
+
+            function handleMessageForStats (message) {
+                if (!message || message.type !== 'give-answer') {
+                    return;
+                }
+
+                const subject =
+                    message?.tossup?.subject ||
+                    window.room?.tossup?.subject ||
+                    window.room?.previous?.tossup?.subject ||
+                    '';
+                const isCorrect = message.isCorrect ?? false;
+                const tossupId =
+                    message?.tossup?._id ||
+                    window.room?.tossup?._id ||
+                    window.room?.previous?.tossup?._id ||
+                    null;
+
+                log('Intercepted give-answer message', {
+                    subject,
+                    isCorrect,
+                    tossupId,
+                    messageDirective: message.directive
+                });
+                recordSessionStat({ subject, isCorrect, tossupId });
+            }
+
+            function attachEmitterHook () {
+                if (!window.room || typeof window.room.emitMessage !== 'function') {
+                    console.warn('[SB Session Stats] room not ready, retrying...');
+                    setTimeout(attachEmitterHook, 250);
+                    return;
+                }
+
+                if (window.__sbSessionStatHooked) {
+                    return;
+                }
+                window.__sbSessionStatHooked = true;
+
+                const originalEmitMessage = window.room.emitMessage.bind(window.room);
+                window.room.emitMessage = function patchedEmitMessage (message) {
+                    try {
+                        handleMessageForStats(message);
+                    } catch (error) {
+                        console.error('[SB Session Stats] Failed to inspect message', error);
+                    }
+                    return originalEmitMessage(message);
+                };
+
+                log('Session stat recorder attached to emitMessage');
+            }
+
+            attachEmitterHook();
+        })();
     </script>
+    
+    <!-- Subject Statistics Table - Bottom Right Corner -->
+    <div id="subject-stats-container">
+        <div id="subject-stats-header">
+            <h6 class="mb-0">Subject Statistics</h6>
+            <button class="btn btn-sm btn-outline-secondary" id="refresh-subject-stats" type="button">Refresh</button>
+        </div>
+        <div id="subject-stats-table-container" class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th scope="col">Subject</th>
+                        <th scope="col">Total</th>
+                        <th scope="col">Correct</th>
+                        <th scope="col">Wrong</th>
+                        <th scope="col">Accuracy</th>
+                    </tr>
+                </thead>
+                <tbody id="subject-stats-body">
+                </tbody>
+            </table>
+        </div>
+    </div>
 </body>
 
 </html> 
