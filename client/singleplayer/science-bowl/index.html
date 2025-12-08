@@ -1696,6 +1696,23 @@
         import { validateAnswer, formatValidationResult } from './answer-validator.js';
         const usingModernClient = window.__sbModernScienceBowlClient === true;
         const legacyHandlersActive = () => window.__sbModernHandlersReady !== true;
+
+        // Text-to-speech shared state (declared early so other handlers can reference safely)
+        let speechSynthesis = window.speechSynthesis;
+        let speechPreferenceEnabled = false;
+        let speechEnabled = false;
+        let currentUtterance = null;
+        let originalWordIndex = 0;
+        let isPaused = false;
+        const SPEECH_RATE_MIN = 0.6;
+        const SPEECH_RATE_MAX = 1.7;
+        const ANSWER_CHOICE_GAP_SLOW_MS = 1400;
+        const ANSWER_CHOICE_GAP_FAST_MS = 350;
+        let speechSegmentTimeout = null;
+        let speechSequenceActive = false;
+        let speechHandledThisQuestion = false;
+        let audioNoticeVisible = false;
+        let audioLockApplied = false;
         
         // Handle buzz and answer submission
         const buzzButton = document.getElementById('buzz');
@@ -1713,6 +1730,7 @@
                     speechSynthesis.cancel();
                     currentUtterance = null;
                     isPaused = false;
+                    clearAudioReadingNotice({ unlockQuestion: true });
                 }
                 
                 // Only send the buzz message if the modern handlers are not active
@@ -1929,19 +1947,6 @@
         });
 
         // Text-to-speech functionality
-        let speechSynthesis = window.speechSynthesis;
-        let speechPreferenceEnabled = false;
-        let speechEnabled = false;
-        let currentUtterance = null;
-        let originalWordIndex = 0;
-        let isPaused = false;
-        const SPEECH_RATE_MIN = 0.6;
-        const SPEECH_RATE_MAX = 1.7;
-        const ANSWER_CHOICE_GAP_SLOW_MS = 1400;
-        const ANSWER_CHOICE_GAP_FAST_MS = 350;
-        let speechSegmentTimeout = null;
-        let speechSequenceActive = false;
-        let speechHandledThisQuestion = false;
 
         function getReadingSpeedSetting() {
             const slider = document.getElementById('reading-speed');
@@ -2015,7 +2020,7 @@
                     clearTimeout(speechSegmentTimeout);
                     speechSegmentTimeout = null;
                 }
-                speechEnabled = false;
+                clearAudioReadingNotice({ unlockQuestion: true });
                 if (typeof onComplete === 'function') {
                     onComplete();
                 }
@@ -2056,6 +2061,7 @@
                         clearTimeout(speechSegmentTimeout);
                         speechSegmentTimeout = null;
                     }
+                    clearAudioReadingNotice({ unlockQuestion: true });
                     if (typeof onComplete === 'function') {
                         onComplete();
                     }
@@ -2068,11 +2074,53 @@
             speakSegment();
         }
 
-        // Function to update question display
-        function updateQuestionDisplay(text) {
+        function applyAudioQuestionLock () {
+            if (typeof window.lockQuestionRevealUntilAnswer === 'function') {
+                window.lockQuestionRevealUntilAnswer();
+                audioLockApplied = true;
+            }
+        }
+
+        function releaseAudioQuestionLock () {
+            if (!audioLockApplied) { return; }
+            if (typeof window.unlockQuestionRevealUntilAnswer === 'function') {
+                window.unlockQuestionRevealUntilAnswer();
+            }
+            audioLockApplied = false;
+        }
+
+        const AUDIO_NOTICE_DEFAULT = 'Audio question playing - listen for the question and answer choices.';
+
+        function setAudioReadingNotice(message = AUDIO_NOTICE_DEFAULT, options = {}) {
+            const { variant = 'info', showSpinner = true } = options;
+            audioNoticeVisible = true;
+            const spinnerHtml = showSpinner
+                ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>'
+                : '';
+            const html = `<div class="alert alert-${variant} audio-reading-notice d-flex align-items-center gap-2 mb-0">${spinnerHtml}<span>${message}</span></div>`;
+            if (typeof window.setQuestionLockOverlay === 'function') {
+                window.setQuestionLockOverlay(html);
+                return;
+            }
             const questionElement = document.getElementById('question');
             if (questionElement) {
-                questionElement.innerHTML = text;
+                questionElement.innerHTML = html;
+            }
+        }
+
+        function clearAudioReadingNotice(options = {}) {
+            const { unlockQuestion = false } = options;
+            audioNoticeVisible = false;
+            if (typeof window.clearQuestionLockOverlay === 'function') {
+                window.clearQuestionLockOverlay();
+            } else {
+                const questionElement = document.getElementById('question');
+                if (questionElement) {
+                    questionElement.innerHTML = '';
+                }
+            }
+            if (unlockQuestion) {
+                releaseAudioQuestionLock();
             }
         }
 
@@ -2108,10 +2156,8 @@
                         originalWordIndex = 0;
                         speechHandledThisQuestion = true;
                         // Display audio mode message
-                        updateQuestionDisplay('<div class="alert alert-info">Reading question in audio mode, please turn up volume</div>');
-                        if (typeof window.lockQuestionRevealUntilAnswer === 'function') {
-                            window.lockQuestionRevealUntilAnswer();
-                        }
+                        setAudioReadingNotice();
+                        applyAudioQuestionLock();
                         
                         // Only start speech if we have a question and no speech is currently playing
                         if (this.questionSplit && this.questionSplit.length > 0 && !speechSynthesis.speaking && !speechSequenceActive) {
@@ -2173,12 +2219,12 @@
                                 console.log('Pausing speech synthesis');
                                 speechSynthesis.pause();
                                 isPaused = true;
-                                updateQuestionDisplay('<div class="alert alert-warning">Audio paused</div>');
+                                clearAudioReadingNotice();
                             } else {
                                 console.log('Resuming speech synthesis');
                                 speechSynthesis.resume();
                                 isPaused = false;
-                                updateQuestionDisplay('<div class="alert alert-info">Reading question in audio mode, please turn up volume</div>');
+                                setAudioReadingNotice();
                             }
                         }
                     } else if (data.type === 'start' || data.type === 'next') {
@@ -2187,6 +2233,7 @@
                         speechEnabled = speechPreferenceEnabled;
                         speechHandledThisQuestion = false;
                         stopCurrentSpeech();
+                        clearAudioReadingNotice({ unlockQuestion: true });
                     }
                 }
             };
@@ -2208,9 +2255,7 @@
             speechEnabled = speechPreferenceEnabled;
             if (!speechEnabled) {
                 stopCurrentSpeech();
-                if (typeof window.unlockQuestionRevealUntilAnswer === 'function') {
-                    window.unlockQuestionRevealUntilAnswer();
-                }
+                clearAudioReadingNotice({ unlockQuestion: true });
             } else if (speechPreferenceEnabled && window.room?.readQuestion) {
                 // Restart reading with speech if enabled mid-question
                 speechHandledThisQuestion = false;

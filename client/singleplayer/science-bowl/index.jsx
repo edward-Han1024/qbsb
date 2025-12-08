@@ -38,6 +38,7 @@ room.categoryManager = new ScienceBowlCategoryManager();
 let questionBufferHtml = '';
 let questionLockActive = false;
 let questionLockedUntilAnswer = false;
+let questionLockOverlayHtml = '';
 
 function lockQuestionRevealUntilAnswer () {
   questionLockActive = true;
@@ -53,6 +54,13 @@ function unlockQuestionRevealUntilAnswer () {
 
 window.lockQuestionRevealUntilAnswer = lockQuestionRevealUntilAnswer;
 window.unlockQuestionRevealUntilAnswer = unlockQuestionRevealUntilAnswer;
+window.setQuestionLockOverlay = setQuestionLockOverlay;
+window.clearQuestionLockOverlay = () => setQuestionLockOverlay('');
+
+function setQuestionLockOverlay (html) {
+  questionLockOverlayHtml = typeof html === 'string' ? html : '';
+  syncQuestionDisplayFromBuffer();
+}
 
 // Load saved category state
 const savedCategoryState = JSON.parse(window.localStorage.getItem('singleplayer-science-bowl-categories') || '{}');
@@ -516,7 +524,7 @@ function syncQuestionDisplayFromBuffer () {
   const questionElement = document.getElementById('question');
   if (!questionElement) { return; }
   if (questionLockActive && questionLockedUntilAnswer) {
-    questionElement.innerHTML = '';
+    questionElement.innerHTML = questionLockOverlayHtml || '';
     return;
   }
   questionElement.innerHTML = questionBufferHtml || '';
@@ -526,6 +534,7 @@ function resetQuestionDisplay () {
   questionBufferHtml = '';
   questionLockActive = false;
   questionLockedUntilAnswer = false;
+  questionLockOverlayHtml = '';
   const questionElement = document.getElementById('question');
   if (questionElement) {
     questionElement.innerHTML = '';
