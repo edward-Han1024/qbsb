@@ -265,6 +265,13 @@
                         <input class="form-check-input" id="toggle-speech" type="checkbox" role="switch">
                         <label class="form-check-label" for="toggle-speech">Enable text-to-speech</label>
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="reading-speed">
+                            Reading speed: <span id="reading-speed-display">50</span>
+                        </label>
+                        <input class="form-range" id="reading-speed" type="range" min="0" max="100" step="5" value="50">
+                    <div class="form-text">Slide left for slower reading, right for faster.</div>
+                    </div>
                     <div class="mb-2"></div>
                 </div>
             </div>
@@ -615,6 +622,113 @@
             </div>
         </div>
     </div>
+
+    <script>
+        (function () {
+            if (window.__sbInlineSpeedControl) { return; }
+            window.__sbInlineSpeedControl = true;
+            const LOG_PREFIX = '[ScienceBowl InlineSpeed]';
+            const USER_ID = 'user';
+            let sliderEl = null;
+            let displayEl = null;
+            let pendingValue = null;
+
+            const clampSpeed = (value) => {
+                const num = Number.isFinite(value) ? value : 50;
+                return Math.min(100, Math.max(0, Math.round(num)));
+            };
+
+            const log = (...args) => { console.log(LOG_PREFIX, ...args); };
+
+            function updateUI (value, { logUpdate = false } = {}) {
+                if (!sliderEl || !displayEl) { return; }
+                const clamped = clampSpeed(value);
+                const stringValue = String(clamped);
+                if (sliderEl.value !== stringValue) {
+                    sliderEl.value = stringValue;
+                }
+                displayEl.textContent = stringValue;
+                if (logUpdate) {
+                    log('Display updated', { clamped });
+                }
+            }
+
+            function sendToRoom (value) {
+                const clamped = clampSpeed(value);
+                const room = window.room;
+                if (!room) {
+                    pendingValue = clamped;
+                    log('Room not ready, queued value', clamped);
+                    return;
+                }
+                room.settings = room.settings || {};
+                room.settings.readingSpeed = clamped;
+                try {
+                    log('Sending reading speed', clamped);
+                    room.message?.(USER_ID, { type: 'set-reading-speed', readingSpeed: clamped });
+                } catch (err) {
+                    console.error(LOG_PREFIX, 'Failed to send reading speed', err);
+                }
+            }
+
+            function handleSliderInput (event) {
+                const value = clampSpeed(Number(event.target.value));
+                updateUI(value, { logUpdate: true });
+                sendToRoom(value);
+            }
+
+            function attachSlider () {
+                sliderEl = document.getElementById('reading-speed');
+                displayEl = document.getElementById('reading-speed-display');
+                if (!sliderEl || !displayEl) {
+                    console.warn(LOG_PREFIX, 'Reading speed slider or label missing');
+                    return;
+                }
+                const initial = clampSpeed(Number(sliderEl.value));
+                updateUI(initial);
+                sliderEl.addEventListener('input', handleSliderInput);
+            }
+
+            function hookRoom (room) {
+                if (!room || room.__inlineSpeedHooked) { return; }
+                room.__inlineSpeedHooked = true;
+                const originalSetReadingSpeed = typeof room.setReadingSpeed === 'function'
+                    ? room.setReadingSpeed.bind(room)
+                    : null;
+
+                if (originalSetReadingSpeed) {
+                    room.setReadingSpeed = function patchedSetReadingSpeed (userId, payload = {}) {
+                        const normalized = clampSpeed(Number(payload.readingSpeed));
+                        updateUI(normalized, { logUpdate: true });
+                        room.settings = room.settings || {};
+                        room.settings.readingSpeed = normalized;
+                        return originalSetReadingSpeed(userId, { ...payload, readingSpeed: normalized });
+                    };
+                    log('Attached room.setReadingSpeed hook');
+                }
+
+                if (typeof room.settings?.readingSpeed === 'number') {
+                    updateUI(room.settings.readingSpeed);
+                }
+
+                if (typeof pendingValue === 'number') {
+                    sendToRoom(pendingValue);
+                    pendingValue = null;
+                }
+            }
+
+            document.addEventListener('DOMContentLoaded', () => {
+                attachSlider();
+                hookRoom(window.room);
+                const roomPoll = setInterval(() => {
+                    if (window.room) {
+                        hookRoom(window.room);
+                        clearInterval(roomPoll);
+                    }
+                }, 250);
+            });
+        })();
+    </script>
 
     <script type="module" src="/bootstrap/bootstrap.bundle.min.js"></script>
     <script type="module" src="/script.js"></script>
@@ -1821,10 +1935,50 @@
         let currentUtterance = null;
         let originalWordIndex = 0;
         let isPaused = false;
-        const ANSWER_CHOICE_GAP_MS = 1000;
+        const SPEECH_RATE_MIN = 0.6;
+        const SPEECH_RATE_MAX = 1.7;
+        const ANSWER_CHOICE_GAP_SLOW_MS = 1400;
+        const ANSWER_CHOICE_GAP_FAST_MS = 350;
         let speechSegmentTimeout = null;
         let speechSequenceActive = false;
         let speechHandledThisQuestion = false;
+
+        function getReadingSpeedSetting() {
+            const slider = document.getElementById('reading-speed');
+            const sliderValue = slider ? parseInt(slider.value, 10) : NaN;
+            if (!Number.isNaN(sliderValue)) {
+                return sliderValue;
+            }
+            const roomSpeed = window.room?.settings?.readingSpeed;
+            if (typeof roomSpeed === 'number' && !Number.isNaN(roomSpeed)) {
+                return roomSpeed;
+            }
+            return 50;
+        }
+
+        function calculateSpeechRate(readingSpeed) {
+            const clamped = Math.max(0, Math.min(100, Number(readingSpeed) || 50));
+            const normalized = (clamped - 50) / 50;
+            if (normalized >= 0) {
+                return 1 + normalized * (SPEECH_RATE_MAX - 1);
+            }
+            return 1 + normalized * (1 - SPEECH_RATE_MIN);
+        }
+
+        function calculateAnswerChoiceGap(readingSpeed) {
+            const clamped = Math.max(0, Math.min(100, Number(readingSpeed) || 50));
+            const ratio = 1 - (clamped / 100);
+            return Math.round(ANSWER_CHOICE_GAP_FAST_MS + ratio * (ANSWER_CHOICE_GAP_SLOW_MS - ANSWER_CHOICE_GAP_FAST_MS));
+        }
+
+        function getSpeechTimingSettings() {
+            const speed = getReadingSpeedSetting();
+            return {
+                speed,
+                rate: calculateSpeechRate(speed),
+                answerGapMs: calculateAnswerChoiceGap(speed)
+            };
+        }
 
         // Function to stop current speech
         function stopCurrentSpeech() {
@@ -1842,7 +1996,7 @@
             speechHandledThisQuestion = false;
         }
 
-        function playSpeechSegments(segments, onComplete) {
+        function playSpeechSegments(segments, onComplete, speechRate = 1.0) {
             if (!Array.isArray(segments) || segments.length === 0) {
                 if (typeof onComplete === 'function') {
                     onComplete();
@@ -1876,7 +2030,7 @@
 
                 const { text, pauseAfter = 0 } = segments[segmentIndex];
                 currentUtterance = new SpeechSynthesisUtterance(text);
-                currentUtterance.rate = 1.0;
+                currentUtterance.rate = speechRate;
 
                 currentUtterance.onend = () => {
                     if (!speechSequenceActive) { return; }
@@ -1968,15 +2122,16 @@
                                     .filter(option => option.length > 0)
                                 : [];
                             
+                            const { rate: speechRate, answerGapMs } = getSpeechTimingSettings();
                             const speechSegments = [{
                                 text: fullQuestion,
-                                pauseAfter: answerChoices.length ? ANSWER_CHOICE_GAP_MS : 0
+                                pauseAfter: answerChoices.length ? answerGapMs : 0
                             }];
 
                             answerChoices.forEach((choice, index) => {
                                 speechSegments.push({
                                     text: choice,
-                                    pauseAfter: (index === answerChoices.length - 1) ? 0 : ANSWER_CHOICE_GAP_MS
+                                    pauseAfter: (index === answerChoices.length - 1) ? 0 : answerGapMs
                                 });
                             });
 
@@ -1985,7 +2140,7 @@
                                 console.log('Speech ended');
                                 this.wordIndex = originalWordIndex;
                                 originalReadQuestion.call(this, timestamp);
-                            });
+                            }, speechRate);
                             return;
                         } else {
                             console.log('No question available for speech or speech already in progress');
