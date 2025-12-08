@@ -421,10 +421,15 @@ function setPacketNumbers ({ packetNumbers }) {
 }
 
 function setReadingSpeed ({ readingSpeed }) {
+  const normalizedSpeed = Number.parseInt(readingSpeed, 10);
+  if (!Number.isNaN(normalizedSpeed) && room?.settings) {
+    room.settings.readingSpeed = normalizedSpeed;
+  }
+  console.log('[Science Bowl] setReadingSpeed message received:', readingSpeed);
   const el = document.getElementById('reading-speed');
   const disp = document.getElementById('reading-speed-display');
-  if (el) el.value = readingSpeed;
-  if (disp) disp.textContent = readingSpeed;
+  if (el && !Number.isNaN(normalizedSpeed)) { el.value = normalizedSpeed; }
+  if (disp) { disp.textContent = Number.isNaN(normalizedSpeed) ? '' : normalizedSpeed; }
   window.localStorage.setItem('singleplayer-science-bowl-settings', JSON.stringify({ ...room.settings, version: settingsVersion }));
 }
 
@@ -809,9 +814,20 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   const elReadingSpeed = document.getElementById('reading-speed');
+  const elReadingSpeedDisplay = document.getElementById('reading-speed-display');
   if (elReadingSpeed) {
     elReadingSpeed.addEventListener('input', (e) => {
-      room.message(USER_ID, { type: 'set-reading-speed', readingSpeed: parseInt(e.target.value) });
+      const rawValue = Number.parseInt(e.target.value, 10);
+      if (Number.isNaN(rawValue)) { return; }
+      const value = Math.min(100, Math.max(0, rawValue));
+      if (elReadingSpeedDisplay) {
+        elReadingSpeedDisplay.textContent = value;
+      }
+      if (elReadingSpeed.value !== String(value)) {
+        elReadingSpeed.value = value;
+      }
+      console.log('[Science Bowl] Reading speed slider adjusted:', { rawValue, value });
+      room.message(USER_ID, { type: 'set-reading-speed', readingSpeed: value });
     });
   }
 

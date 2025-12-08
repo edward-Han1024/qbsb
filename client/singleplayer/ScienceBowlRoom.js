@@ -310,7 +310,13 @@ export default class ScienceBowlRoom extends QuestionRoom {
     }
 
     time = time * 0.9 * (125 - this.settings.readingSpeed);
-    const delay = time - Date.now() + expectedReadTime;
+    const delay = Math.max(0, time - Date.now() + expectedReadTime);
+    console.debug('ScienceBowlRoom: Scheduling word', {
+      word,
+      readingSpeed: this.settings.readingSpeed,
+      computedTime: Number.isFinite(time) ? Number(time.toFixed(2)) : time,
+      delay
+    });
 
     this.timeoutID = setTimeout(() => {
       if (!this.paused && !this.buzzedIn) {
@@ -345,8 +351,14 @@ export default class ScienceBowlRoom extends QuestionRoom {
   }
 
   setReadingSpeed(userId, { readingSpeed }) {
-    this.settings.readingSpeed = readingSpeed;
-    this.emitMessage({ type: 'set-reading-speed', readingSpeed, userId });
+    let numericSpeed = Number.parseInt(readingSpeed, 10);
+    if (Number.isNaN(numericSpeed)) {
+      numericSpeed = this.settings.readingSpeed;
+    }
+    numericSpeed = Math.max(0, Math.min(100, numericSpeed));
+    this.settings.readingSpeed = numericSpeed;
+    console.log('ScienceBowlRoom: Reading speed updated ->', numericSpeed);
+    this.emitMessage({ type: 'set-reading-speed', readingSpeed: numericSpeed, userId });
   }
 
   setSubjects(userId, { subjects }) {
