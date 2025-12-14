@@ -257,9 +257,11 @@
                     <input class="form-control my-1" id="packet-number" type="text" placeholder="Packet Numbers">
                 </div>
                 <div class="mt-2" id="general-settings">
-                    <div class="text-center mb-2">
+                    <div class="text-center mb-2 d-flex flex-wrap justify-content-center gap-2">
                         <button class="btn btn-success" id="category-select-button" data-bs-target="#category-modal-root"
                             data-bs-toggle="modal" type="button">Categories</button>
+                        <button class="btn btn-outline-primary" id="competition-select-button" data-bs-target="#competition-modal"
+                            data-bs-toggle="modal" type="button">Competitions</button>
                     </div>
                     <!-- AI mode toggle removed -->
                     <hr>
@@ -578,6 +580,39 @@
       </div>
     </div>
 
+    <div class="modal fade" id="competition-modal" tabindex="-1" aria-labelledby="competition-modal-label">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="competition-modal-label">Select Competitions</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">
+                        Choose which competitions to include when pulling questions.
+                        Leave everything unchecked to allow questions from every competition.
+                    </p>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input competition-checkbox" type="checkbox" value="SMH" id="competition-smh">
+                        <label class="form-check-label" for="competition-smh">SMH</label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input competition-checkbox" type="checkbox" value="NSB" id="competition-nsb">
+                        <label class="form-check-label" for="competition-nsb">NSB</label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input competition-checkbox" type="checkbox" value="BASH" id="competition-bash">
+                        <label class="form-check-label" for="competition-bash">BASH</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" id="clear-competition-selection">Clear</button>
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Done</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal" id="ai-settings-modal">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -725,6 +760,106 @@
     <script type="module" src="/bootstrap/bootstrap.bundle.min.js"></script>
     <script type="module" src="/script.js"></script>
     <script type="module" src="index.min.js"></script>
+    <script>
+        (function setupCompetitionFilters () {
+            const QUERY_STORAGE_KEY = 'singleplayer-science-bowl-query';
+            const QUERY_VERSION = '2025-05-07';
+            const COMPETITIONS = ['SMH', 'NSB', 'BASH'];
+            const CHECKBOX_SELECTOR = '.competition-checkbox';
+            let cachedSelection = [];
+            let roomSyncInterval = null;
+
+            function safeParse (value) {
+                if (typeof value !== 'string' || value.length === 0) {
+                    return null;
+                }
+                try {
+                    return JSON.parse(value);
+                } catch (error) {
+                    console.warn('[Science Bowl] Failed to parse saved query state', error);
+                    return null;
+                }
+            }
+
+            function normalizeSelection (selection = []) {
+                return selection.filter((name) => COMPETITIONS.includes(name));
+            }
+
+            function loadInitialSelection () {
+                const saved = safeParse(window.localStorage.getItem(QUERY_STORAGE_KEY));
+                if (!Array.isArray(saved?.competitions)) { return []; }
+                return normalizeSelection(saved.competitions);
+            }
+
+            function persistSelection (selection) {
+                try {
+                    const baseQuery = { ...(window.room?.query || {}) };
+                    baseQuery.competitions = selection.slice();
+                    window.localStorage.setItem(QUERY_STORAGE_KEY, JSON.stringify({ ...baseQuery, version: QUERY_VERSION }));
+                } catch (error) {
+                    console.warn('[Science Bowl] Failed to persist competition filters', error);
+                }
+            }
+
+            function assignSelectionToRoom (selection) {
+                if (!window.room || !window.room.query) {
+                    if (roomSyncInterval === null) {
+                        roomSyncInterval = setInterval(() => {
+                            if (window.room && window.room.query) {
+                                assignSelectionToRoom(selection);
+                                clearInterval(roomSyncInterval);
+                                roomSyncInterval = null;
+                            }
+                        }, 100);
+                    }
+                    return;
+                }
+                window.room.query.competitions = selection.slice();
+            }
+
+            function syncCheckboxes (selection = cachedSelection) {
+                document.querySelectorAll(CHECKBOX_SELECTOR).forEach((input) => {
+                    input.checked = selection.includes(input.value);
+                });
+            }
+
+            function getSelectionFromUI () {
+                const values = Array.from(document.querySelectorAll(CHECKBOX_SELECTOR))
+                    .filter((input) => input.checked)
+                    .map((input) => input.value);
+                return normalizeSelection(values);
+            }
+
+            function handleSelectionChange () {
+                cachedSelection = getSelectionFromUI();
+                assignSelectionToRoom(cachedSelection);
+                persistSelection(cachedSelection);
+            }
+
+            cachedSelection = loadInitialSelection();
+            assignSelectionToRoom(cachedSelection);
+
+            document.addEventListener('DOMContentLoaded', () => {
+                syncCheckboxes();
+                document.querySelectorAll(CHECKBOX_SELECTOR).forEach((input) => {
+                    input.addEventListener('change', handleSelectionChange);
+                });
+
+                document.getElementById('clear-competition-selection')?.addEventListener('click', () => {
+                    document.querySelectorAll(CHECKBOX_SELECTOR).forEach((input) => {
+                        input.checked = false;
+                    });
+                    handleSelectionChange();
+                });
+
+                document.getElementById('competition-modal')?.addEventListener('show.bs.modal', () => {
+                    const current = normalizeSelection(window.room?.query?.competitions || cachedSelection);
+                    cachedSelection = current.slice();
+                    syncCheckboxes(current);
+                });
+            });
+        })();
+    </script>
     <script>
         // Initialize updateStatDisplay if not already defined
         if (typeof window.updateStatDisplay !== 'function') {
@@ -1774,13 +1909,17 @@
                 
                 // Clear and hide answer input
                 answerInput.value = '';
-                answerInputGroup.classList.add('d-none');
+                if (answerInputGroup) {
+                    answerInputGroup.classList.add('d-none');
+                }
                 
                 // Hide toggle correct button and clear answer displays
-                toggleCorrectButton.classList.add('d-none');
-                if (answerDisplay) answerDisplay.innerHTML = '';
-                if (userAnswer) userAnswer.innerHTML = '';
-                if (answer) answer.innerHTML = '';
+                if (toggleCorrectButton) {
+                    toggleCorrectButton.classList.add('d-none');
+                }
+                if (answerDisplay) { answerDisplay.innerHTML = ''; }
+                if (userAnswer) { userAnswer.innerHTML = ''; }
+                if (answer) { answer.innerHTML = ''; }
                 
                 // Ensure categories are synced
                 window.room.query.subjects = window.room.categoryManager.categories;
