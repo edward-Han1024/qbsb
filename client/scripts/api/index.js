@@ -78,9 +78,9 @@ export default class api {
       .then(response => response.tossups);
   }
 
-  static async getRandomScienceBowlQuestion ({ subjects, competitions, years, isMcq, isTossup, number }) {
-    console.log('API Client: Raw parameters:', { subjects, competitions, years, isMcq, isTossup, number });
-    const filteredParams = filterParams({ subjects, competitions, years, isMcq, isTossup, number });
+  static async getRandomScienceBowlQuestion ({ subjects, competitions, excludeCompetitions, years, isMcq, isTossup, number }) {
+    console.log('API Client: Raw parameters:', { subjects, competitions, excludeCompetitions, years, isMcq, isTossup, number });
+    const filteredParams = filterParams({ subjects, competitions, excludeCompetitions, years, isMcq, isTossup, number });
     console.log('API Client: Filtered parameters:', filteredParams);
     const url = '/api/science-bowl/random-question?' + new URLSearchParams(filteredParams);
     console.log('API Client: Full URL:', url);

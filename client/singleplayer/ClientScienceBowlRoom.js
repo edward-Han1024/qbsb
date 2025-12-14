@@ -32,6 +32,7 @@ export default class ClientScienceBowlRoom extends ScienceBowlRoom {
       ...this.settings,
       aiMode: false
     };
+    this.excludeCompetitions = [];
 
     this.checkAnswer = api.checkAnswer;
     this.getRandomQuestions = async (args = {}) => {
@@ -43,6 +44,9 @@ export default class ClientScienceBowlRoom extends ScienceBowlRoom {
       const competitionFilter = Array.isArray(args.competitions)
         ? args.competitions
         : this.query.competitions;
+      const competitionExclusions = Array.isArray(args.excludeCompetitions)
+        ? args.excludeCompetitions
+        : (Array.isArray(this.excludeCompetitions) ? this.excludeCompetitions : []);
       const yearFilter = Array.isArray(args.years) ? args.years : this.query.years;
       const isMcq = typeof args.isMcq === 'boolean' ? args.isMcq : this.query.isMcq;
       const isTossup = typeof args.isTossup === 'boolean' ? args.isTossup : this.query.isTossup;
@@ -53,6 +57,7 @@ export default class ClientScienceBowlRoom extends ScienceBowlRoom {
       const query = {
         subjects: subjectFilter,
         competitions: competitionFilter,
+        excludeCompetitions: competitionExclusions,
         years: yearFilter,
         isMcq,
         isTossup,

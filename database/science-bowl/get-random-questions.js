@@ -23,11 +23,12 @@ export async function getRandomQuestions(query) {
   // Extract parameters without default values to preserve undefined
   const subjects = query.subjects;
   const competitions = query.competitions;
+  const excludeCompetitions = query.excludeCompetitions;
   const years = query.years;
   const isMcq = query.isMcq;
   const isTossup = query.isTossup;
   const number = query.number;
-  console.log('getRandomQuestions: Parsed parameters:', { subjects, competitions, years, isMcq, isTossup, number });
+  console.log('getRandomQuestions: Parsed parameters:', { subjects, competitions, excludeCompetitions, years, isMcq, isTossup, number });
 
   const matchStage = {};
   
@@ -37,6 +38,8 @@ export async function getRandomQuestions(query) {
   
   if (competitions && competitions.length > 0) {
     matchStage.competition = { $in: competitions };
+  } else if (excludeCompetitions && excludeCompetitions.length > 0) {
+    matchStage.competition = { $nin: excludeCompetitions };
   }
   
   if (years && years.length > 0) {

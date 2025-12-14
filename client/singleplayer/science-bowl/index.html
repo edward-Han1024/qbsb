@@ -774,17 +774,17 @@
             const CHECKBOX_SELECTOR = '.competition-checkbox';
             const MS_SWITCH_ID = 'toggle-ms-mode';
             const COMPETITION_BUTTON_ID = 'competition-select-button';
+
             let cachedSelection = [];
             let msMode = false;
             let roomSyncInterval = null;
+            let pendingSelection = [];
+            let pendingExclude = [];
+            const competitionButtonState = { target: null, toggle: null };
 
             function safeParse (value) {
-                if (typeof value !== 'string' || value.length === 0) {
-                    return null;
-                }
-                try {
-                    return JSON.parse(value);
-                } catch (error) {
+                if (typeof value !== 'string' || value.length === 0) { return null; }
+                try { return JSON.parse(value); } catch (error) {
                     console.warn('[Science Bowl] Failed to parse saved query state', error);
                     return null;
                 }
@@ -805,10 +805,11 @@
                 return saved?.mode === 'MS';
             }
 
-            function persistSelection (selection) {
+            function persistSelection (selection = cachedSelection) {
+                const manualSelection = Array.isArray(selection) ? selection.slice() : [];
                 try {
                     const baseQuery = { ...(window.room?.query || {}) };
-                    baseQuery.competitions = selection.slice();
+                    baseQuery.competitions = manualSelection;
                     window.localStorage.setItem(QUERY_STORAGE_KEY, JSON.stringify({ ...baseQuery, version: QUERY_VERSION }));
                 } catch (error) {
                     console.warn('[Science Bowl] Failed to persist competition filters', error);
@@ -823,12 +824,21 @@
                 }
             }
 
-            function assignSelectionToRoom (selection) {
+            function clearQuestionCaches () {
+                if (!window.room) { return; }
+                if (Array.isArray(window.room.randomQuestionCache)) { window.room.randomQuestionCache.length = 0; }
+                if (Array.isArray(window.room.setCache)) { window.room.setCache.length = 0; }
+            }
+
+            function assignSelectionToRoom (selection, { exclude = [] } = {}) {
+                pendingSelection = Array.isArray(selection) ? selection.slice() : [];
+                pendingExclude = Array.isArray(exclude) ? exclude.slice() : [];
+
                 if (!window.room || !window.room.query) {
                     if (roomSyncInterval === null) {
                         roomSyncInterval = setInterval(() => {
                             if (window.room && window.room.query) {
-                                assignSelectionToRoom(selection);
+                                assignSelectionToRoom(pendingSelection, { exclude: pendingExclude });
                                 clearInterval(roomSyncInterval);
                                 roomSyncInterval = null;
                             }
@@ -836,7 +846,11 @@
                     }
                     return;
                 }
-                window.room.query.competitions = selection.slice();
+
+                window.room.query.competitions = pendingSelection.slice();
+                window.room.excludeCompetitions = pendingExclude.slice();
+                window.room.msMode = msMode;
+                clearQuestionCaches();
             }
 
             function syncCheckboxes (selection = cachedSelection) {
@@ -852,21 +866,17 @@
                 return normalizeSelection(values);
             }
 
-            function getEffectiveSelection () {
-                if (msMode) {
-                    return [MIDDLE_SCHOOL_COMPETITION];
-                }
+            function getSelectionState () {
+                if (msMode) { return { competitions: [MIDDLE_SCHOOL_COMPETITION], exclude: [] }; }
                 const sanitized = normalizeSelection(cachedSelection);
-                if (sanitized.length === 0) {
-                    return COMPETITIONS.slice();
-                }
-                return sanitized;
+                if (sanitized.length > 0) { return { competitions: sanitized, exclude: [] }; }
+                return { competitions: [], exclude: [MIDDLE_SCHOOL_COMPETITION] };
             }
 
             function updateRoomCompetitions () {
-                const effective = getEffectiveSelection();
-                assignSelectionToRoom(effective);
-                persistSelection(effective);
+                const { competitions, exclude } = getSelectionState();
+                assignSelectionToRoom(competitions, { exclude });
+                persistSelection();
             }
 
             function handleSelectionChange () {
@@ -878,20 +888,30 @@
                 const disabled = msMode;
                 const button = document.getElementById(COMPETITION_BUTTON_ID);
                 if (button) {
+                    if (!competitionButtonState.target) { competitionButtonState.target = button.getAttribute('data-bs-target'); }
+                    if (!competitionButtonState.toggle) { competitionButtonState.toggle = button.getAttribute('data-bs-toggle'); }
                     button.disabled = disabled;
+                    button.classList.toggle('disabled', disabled);
+                    if (disabled) {
+                        button.setAttribute('aria-disabled', 'true');
+                        button.removeAttribute('data-bs-target');
+                        button.removeAttribute('data-bs-toggle');
+                    } else {
+                        button.removeAttribute('aria-disabled');
+                        if (competitionButtonState.target) { button.setAttribute('data-bs-target', competitionButtonState.target); }
+                        if (competitionButtonState.toggle) { button.setAttribute('data-bs-toggle', competitionButtonState.toggle); }
+                    }
                 }
+
                 const clearButton = document.getElementById('clear-competition-selection');
-                if (clearButton) {
-                    clearButton.disabled = disabled;
-                }
-                document.querySelectorAll(CHECKBOX_SELECTOR).forEach((input) => {
-                    input.disabled = disabled;
-                });
+                if (clearButton) { clearButton.disabled = disabled; }
+                document.querySelectorAll(CHECKBOX_SELECTOR).forEach((input) => { input.disabled = disabled; });
             }
 
             cachedSelection = loadInitialSelection();
             msMode = loadSavedMsMode();
-            updateRoomCompetitions();
+            const initialState = getSelectionState();
+            assignSelectionToRoom(initialState.competitions, { exclude: initialState.exclude });
 
             document.addEventListener('DOMContentLoaded', () => {
                 syncCheckboxes();
@@ -913,14 +933,12 @@
                 });
 
                 document.getElementById('clear-competition-selection')?.addEventListener('click', () => {
-                    document.querySelectorAll(CHECKBOX_SELECTOR).forEach((input) => {
-                        input.checked = false;
-                    });
+                    document.querySelectorAll(CHECKBOX_SELECTOR).forEach((input) => { input.checked = false; });
                     handleSelectionChange();
                 });
 
                 document.getElementById('competition-modal')?.addEventListener('show.bs.modal', () => {
-                    syncCheckboxes(msMode ? [] : normalizeSelection(window.room?.query?.competitions || cachedSelection));
+                    syncCheckboxes(cachedSelection);
                 });
             });
         })();
