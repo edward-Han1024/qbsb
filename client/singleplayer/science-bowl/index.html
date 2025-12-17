@@ -205,7 +205,10 @@
                     <a class="nav-link" href="/about/">About</a>
                     <a class="nav-link" href="/settings/">Settings</a>
                 </div>
-                <div class="d-flex">
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="toggle-dark-mode-button" aria-pressed="false">
+                        Dark Mode
+                    </button>
                     <ul class="navbar-nav mb-2 mb-lg-0">
                         <a class="nav-link" href="/user/login" id="login-link">Log in</a>
                     </ul>
@@ -297,12 +300,7 @@
                                 of <span id="packet-length-info">-</span>
                             </b>
                         </span>
-                        <div class="d-flex gap-2">
-                            <!-- Debug button for testing AI help -->
-                            <button type="button" class="btn btn-warning btn-sm" id="test-ai-help">
-                                Test AI Help
-                            </button>
-                        </div>
+                        <div class="d-flex gap-2 align-items-start flex-wrap"></div>
                     </div>
                     <div id="question" class="mb-3"></div>
                     <div id="answer-display" class="mb-3"></div>
@@ -440,8 +438,8 @@
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title me-2" id="category-modal-label">Select Categories</h5>
-            <button class="btn btn-primary me-1" id="toggle-all" onclick="console.log('Toggle all clicked. Current categories:', window.room.categoryManager.categories); window.room.categoryManager.import(window.room.categoryManager.categories.length === 0 ? {categories: ['MATH', 'PHYSICS', 'CHEMISTRY', 'BIOLOGY', 'EARTH AND SPACE', 'ENERGY']} : {}); window.room.categoryManager.loadCategoryModal(); window.room.query.subjects = window.room.categoryManager.categories; window.localStorage.setItem('singleplayer-science-bowl-categories', JSON.stringify({...window.room.categoryManager.export(), version: '2025-05-07'})); document.querySelectorAll('.category-checkbox').forEach(checkbox => checkbox.checked = window.room.categoryManager.categories.includes(checkbox.id));">Toggle all</button>
-            <button class="btn btn-primary" id="toggle-percent-view" onclick="console.log('Percent view clicked. Current categories:', window.room.categoryManager.categories); window.room.categoryManager.percentView = !window.room.categoryManager.percentView; window.room.categoryManager.loadCategoryModal(); window.localStorage.setItem('singleplayer-science-bowl-categories', JSON.stringify({...window.room.categoryManager.export(), version: '2025-05-07'})); document.querySelectorAll('.category-checkbox').forEach(checkbox => checkbox.checked = window.room.categoryManager.categories.includes(checkbox.id));">% view</button>
+            <button class="btn btn-primary me-1" id="toggle-all" onclick="console.log('Toggle all clicked. Current categories:', window.room.categoryManager.categories); window.room.categoryManager.import(window.room.categoryManager.categories.length === 0 ? {categories: ['MATH', 'PHYSICS', 'CHEMISTRY', 'BIOLOGY', 'EARTH AND SPACE', 'ENERGY']} : {}); window.room.categoryManager.loadCategoryModal(); window.room.query.subjects = window.room.categoryManager.categories; window.localStorage.setItem('singleplayer-science-bowl-categories', JSON.stringify({...window.room.categoryManager.export(), version: '2025-05-07'})); document.querySelectorAll('.category-checkbox').forEach(checkbox => checkbox.checked = window.room.categoryManager.categories.includes(checkbox.id)); window.invalidateScienceBowlQuestionCache && window.invalidateScienceBowlQuestionCache('categories');">Toggle all</button>
+            <button class="btn btn-primary" id="toggle-percent-view" onclick="console.log('Percent view clicked. Current categories:', window.room.categoryManager.categories); window.room.categoryManager.percentView = !window.room.categoryManager.percentView; window.room.categoryManager.loadCategoryModal(); window.localStorage.setItem('singleplayer-science-bowl-categories', JSON.stringify({...window.room.categoryManager.export(), version: '2025-05-07'})); document.querySelectorAll('.category-checkbox').forEach(checkbox => checkbox.checked = window.room.categoryManager.categories.includes(checkbox.id)); window.invalidateScienceBowlQuestionCache && window.invalidateScienceBowlQuestionCache('categories');">% view</button>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body">
@@ -449,27 +447,27 @@
               <div class="col-12" id="categories">
                 <h5 class="text-center">Category</h5>
                 <div>
-                  <input type="checkbox" class="btn-check category-checkbox" autocomplete="off" id="MATH" onclick="console.log('Category checkbox clicked: MATH. Current categories:', window.room.categoryManager.categories); window.room.categoryManager.updateCategory('MATH'); window.room.categoryManager.loadCategoryModal(); window.room.query.subjects = window.room.categoryManager.categories; window.localStorage.setItem('singleplayer-science-bowl-categories', JSON.stringify({...window.room.categoryManager.export(), version: '2025-05-07'})); document.querySelectorAll('.category-checkbox').forEach(checkbox => checkbox.checked = window.room.categoryManager.categories.includes(checkbox.id));">
+                  <input type="checkbox" class="btn-check category-checkbox" autocomplete="off" id="MATH" onclick="console.log('Category checkbox clicked: MATH. Current categories:', window.room.categoryManager.categories); window.room.categoryManager.updateCategory('MATH'); window.room.categoryManager.loadCategoryModal(); window.room.query.subjects = window.room.categoryManager.categories; window.localStorage.setItem('singleplayer-science-bowl-categories', JSON.stringify({...window.room.categoryManager.export(), version: '2025-05-07'})); document.querySelectorAll('.category-checkbox').forEach(checkbox => checkbox.checked = window.room.categoryManager.categories.includes(checkbox.id)); window.invalidateScienceBowlQuestionCache && window.invalidateScienceBowlQuestionCache('categories');">
                   <label class="btn btn-outline-primary w-100 rounded-0 my-1" for="MATH">MATH<br></label>
                 </div>
                 <div>
-                  <input type="checkbox" class="btn-check category-checkbox" autocomplete="off" id="PHYSICS" onclick="console.log('Category checkbox clicked: PHYSICS. Current categories:', window.room.categoryManager.categories); window.room.categoryManager.updateCategory('PHYSICS'); window.room.categoryManager.loadCategoryModal(); window.room.query.subjects = window.room.categoryManager.categories; window.localStorage.setItem('singleplayer-science-bowl-categories', JSON.stringify({...window.room.categoryManager.export(), version: '2025-05-07'})); document.querySelectorAll('.category-checkbox').forEach(checkbox => checkbox.checked = window.room.categoryManager.categories.includes(checkbox.id));">
+                  <input type="checkbox" class="btn-check category-checkbox" autocomplete="off" id="PHYSICS" onclick="console.log('Category checkbox clicked: PHYSICS. Current categories:', window.room.categoryManager.categories); window.room.categoryManager.updateCategory('PHYSICS'); window.room.categoryManager.loadCategoryModal(); window.room.query.subjects = window.room.categoryManager.categories; window.localStorage.setItem('singleplayer-science-bowl-categories', JSON.stringify({...window.room.categoryManager.export(), version: '2025-05-07'})); document.querySelectorAll('.category-checkbox').forEach(checkbox => checkbox.checked = window.room.categoryManager.categories.includes(checkbox.id)); window.invalidateScienceBowlQuestionCache && window.invalidateScienceBowlQuestionCache('categories');">
                   <label class="btn btn-outline-danger w-100 rounded-0 my-1" for="PHYSICS">PHYSICS<br></label>
                 </div>
                 <div>
-                  <input type="checkbox" class="btn-check category-checkbox" autocomplete="off" id="CHEMISTRY" onclick="console.log('Category checkbox clicked: CHEMISTRY. Current categories:', window.room.categoryManager.categories); window.room.categoryManager.updateCategory('CHEMISTRY'); window.room.categoryManager.loadCategoryModal(); window.room.query.subjects = window.room.categoryManager.categories; window.localStorage.setItem('singleplayer-science-bowl-categories', JSON.stringify({...window.room.categoryManager.export(), version: '2025-05-07'})); document.querySelectorAll('.category-checkbox').forEach(checkbox => checkbox.checked = window.room.categoryManager.categories.includes(checkbox.id));">
+                  <input type="checkbox" class="btn-check category-checkbox" autocomplete="off" id="CHEMISTRY" onclick="console.log('Category checkbox clicked: CHEMISTRY. Current categories:', window.room.categoryManager.categories); window.room.categoryManager.updateCategory('CHEMISTRY'); window.room.categoryManager.loadCategoryModal(); window.room.query.subjects = window.room.categoryManager.categories; window.localStorage.setItem('singleplayer-science-bowl-categories', JSON.stringify({...window.room.categoryManager.export(), version: '2025-05-07'})); document.querySelectorAll('.category-checkbox').forEach(checkbox => checkbox.checked = window.room.categoryManager.categories.includes(checkbox.id)); window.invalidateScienceBowlQuestionCache && window.invalidateScienceBowlQuestionCache('categories');">
                   <label class="btn btn-outline-warning w-100 rounded-0 my-1" for="CHEMISTRY">CHEMISTRY<br></label>
                 </div>
                 <div>
-                  <input type="checkbox" class="btn-check category-checkbox" autocomplete="off" id="BIOLOGY" onclick="console.log('Category checkbox clicked: BIOLOGY. Current categories:', window.room.categoryManager.categories); window.room.categoryManager.updateCategory('BIOLOGY'); window.room.categoryManager.loadCategoryModal(); window.room.query.subjects = window.room.categoryManager.categories; window.localStorage.setItem('singleplayer-science-bowl-categories', JSON.stringify({...window.room.categoryManager.export(), version: '2025-05-07'})); document.querySelectorAll('.category-checkbox').forEach(checkbox => checkbox.checked = window.room.categoryManager.categories.includes(checkbox.id));">
+                  <input type="checkbox" class="btn-check category-checkbox" autocomplete="off" id="BIOLOGY" onclick="console.log('Category checkbox clicked: BIOLOGY. Current categories:', window.room.categoryManager.categories); window.room.categoryManager.updateCategory('BIOLOGY'); window.room.categoryManager.loadCategoryModal(); window.room.query.subjects = window.room.categoryManager.categories; window.localStorage.setItem('singleplayer-science-bowl-categories', JSON.stringify({...window.room.categoryManager.export(), version: '2025-05-07'})); document.querySelectorAll('.category-checkbox').forEach(checkbox => checkbox.checked = window.room.categoryManager.categories.includes(checkbox.id)); window.invalidateScienceBowlQuestionCache && window.invalidateScienceBowlQuestionCache('categories');">
                   <label class="btn btn-outline-success w-100 rounded-0 my-1" for="BIOLOGY">BIOLOGY<br></label>
                 </div>
                 <div>
-                  <input type="checkbox" class="btn-check category-checkbox" autocomplete="off" id="EARTH AND SPACE" onclick="console.log('Category checkbox clicked: EARTH AND SPACE. Current categories:', window.room.categoryManager.categories); window.room.categoryManager.updateCategory('EARTH AND SPACE'); window.room.categoryManager.loadCategoryModal(); window.room.query.subjects = window.room.categoryManager.categories; window.localStorage.setItem('singleplayer-science-bowl-categories', JSON.stringify({...window.room.categoryManager.export(), version: '2025-05-07'})); document.querySelectorAll('.category-checkbox').forEach(checkbox => checkbox.checked = window.room.categoryManager.categories.includes(checkbox.id));">
+                  <input type="checkbox" class="btn-check category-checkbox" autocomplete="off" id="EARTH AND SPACE" onclick="console.log('Category checkbox clicked: EARTH AND SPACE. Current categories:', window.room.categoryManager.categories); window.room.categoryManager.updateCategory('EARTH AND SPACE'); window.room.categoryManager.loadCategoryModal(); window.room.query.subjects = window.room.categoryManager.categories; window.localStorage.setItem('singleplayer-science-bowl-categories', JSON.stringify({...window.room.categoryManager.export(), version: '2025-05-07'})); document.querySelectorAll('.category-checkbox').forEach(checkbox => checkbox.checked = window.room.categoryManager.categories.includes(checkbox.id)); window.invalidateScienceBowlQuestionCache && window.invalidateScienceBowlQuestionCache('categories');">
                   <label class="btn btn-outline-info w-100 rounded-0 my-1" for="EARTH AND SPACE">EARTH AND SPACE<br></label>
                 </div>
                 <div>
-                  <input type="checkbox" class="btn-check category-checkbox" autocomplete="off" id="ENERGY" onclick="console.log('Category checkbox clicked: ENERGY. Current categories:', window.room.categoryManager.categories); window.room.categoryManager.updateCategory('ENERGY'); window.room.categoryManager.loadCategoryModal(); window.room.query.subjects = window.room.categoryManager.categories; window.localStorage.setItem('singleplayer-science-bowl-categories', JSON.stringify({...window.room.categoryManager.export(), version: '2025-05-07'})); document.querySelectorAll('.category-checkbox').forEach(checkbox => checkbox.checked = window.room.categoryManager.categories.includes(checkbox.id));">
+                  <input type="checkbox" class="btn-check category-checkbox" autocomplete="off" id="ENERGY" onclick="console.log('Category checkbox clicked: ENERGY. Current categories:', window.room.categoryManager.categories); window.room.categoryManager.updateCategory('ENERGY'); window.room.categoryManager.loadCategoryModal(); window.room.query.subjects = window.room.categoryManager.categories; window.localStorage.setItem('singleplayer-science-bowl-categories', JSON.stringify({...window.room.categoryManager.export(), version: '2025-05-07'})); document.querySelectorAll('.category-checkbox').forEach(checkbox => checkbox.checked = window.room.categoryManager.categories.includes(checkbox.id)); window.invalidateScienceBowlQuestionCache && window.invalidateScienceBowlQuestionCache('categories');">
                   <label class="btn btn-outline-secondary w-100 rounded-0 my-1" for="ENERGY">ENERGY<br></label>
                 </div>
               </div>
@@ -607,6 +605,10 @@
                     <div class="form-check mb-2">
                         <input class="form-check-input competition-checkbox" type="checkbox" value="BASH" id="competition-bash">
                         <label class="form-check-label" for="competition-bash">BASH</label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input competition-checkbox" type="checkbox" value="SSB" id="competition-ssb">
+                        <label class="form-check-label" for="competition-ssb">Stanford SB</label>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -760,6 +762,64 @@
             });
         })();
     </script>
+    <script>
+        (function initDarkModeButton () {
+            const BUTTON_ID = 'toggle-dark-mode-button';
+
+            function getThemeState () {
+                if (typeof window.__getColorTheme === 'function') {
+                    return window.__getColorTheme();
+                }
+                if (document.documentElement.dataset.theme) {
+                    return document.documentElement.dataset.theme;
+                }
+                return document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+            }
+
+            function applyThemeFromButton (isDark) {
+                const setter = window.__setColorTheme;
+                if (typeof setter === 'function') {
+                    setter(isDark ? 'dark' : 'light');
+                    return;
+                }
+                const stylesheet = document.querySelector('#custom-css');
+                if (stylesheet) {
+                    stylesheet.setAttribute('href', isDark ? '/bootstrap/dark.css' : '/bootstrap/light.css');
+                }
+                window.localStorage.setItem('color-theme', isDark ? 'dark' : 'light');
+            }
+
+            function syncButtonState (button) {
+                if (!button) { return; }
+                const isDark = getThemeState() === 'dark';
+                const label = isDark ? 'Light Mode' : 'Dark Mode';
+                if (button.textContent.trim() !== label) {
+                    button.textContent = label;
+                }
+                button.setAttribute('aria-pressed', String(isDark));
+            }
+
+            document.addEventListener('DOMContentLoaded', () => {
+                const button = document.getElementById(BUTTON_ID);
+                if (!button) { return; }
+
+                syncButtonState(button);
+                button.addEventListener('click', () => {
+                    const isDark = getThemeState() === 'dark';
+                    applyThemeFromButton(!isDark);
+                    syncButtonState(button);
+                });
+
+                const observer = new MutationObserver(() => syncButtonState(button));
+                observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class'] });
+                window.addEventListener('storage', (event) => {
+                    if (event.key === 'color-theme') {
+                        syncButtonState(button);
+                    }
+                });
+            });
+        })();
+    </script>
 
     <script type="module" src="/bootstrap/bootstrap.bundle.min.js"></script>
     <script type="module" src="/script.js"></script>
@@ -768,7 +828,7 @@
         (function setupCompetitionFilters () {
             const QUERY_STORAGE_KEY = 'singleplayer-science-bowl-query';
             const QUERY_VERSION = '2025-05-07';
-            const COMPETITIONS = ['SMH', 'NSB', 'BASH'];
+            const COMPETITIONS = ['SMH', 'NSB', 'BASH', 'SSB'];
             const MIDDLE_SCHOOL_COMPETITION = 'MSNSB';
             const MODE_STORAGE_KEY = 'singleplayer-science-bowl-level';
             const CHECKBOX_SELECTOR = '.competition-checkbox';
@@ -830,6 +890,15 @@
                 if (Array.isArray(window.room.setCache)) { window.room.setCache.length = 0; }
             }
 
+            function invalidateQuestionCaches (reason = 'manual') {
+                clearQuestionCaches();
+                if (typeof console?.debug === 'function') {
+                    console.debug(`[Science Bowl] Question cache cleared (${reason})`);
+                }
+            }
+
+            window.invalidateScienceBowlQuestionCache = invalidateQuestionCaches;
+
             function assignSelectionToRoom (selection, { exclude = [] } = {}) {
                 pendingSelection = Array.isArray(selection) ? selection.slice() : [];
                 pendingExclude = Array.isArray(exclude) ? exclude.slice() : [];
@@ -850,7 +919,7 @@
                 window.room.query.competitions = pendingSelection.slice();
                 window.room.excludeCompetitions = pendingExclude.slice();
                 window.room.msMode = msMode;
-                clearQuestionCaches();
+                invalidateQuestionCaches('competition filters');
             }
 
             function syncCheckboxes (selection = cachedSelection) {

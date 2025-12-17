@@ -16,24 +16,47 @@ if (window.localStorage.getItem('sound-effects') === 'true') {
 }
 
 const stylesheet = document.querySelector('#custom-css');
-document.getElementById('toggle-color-theme').addEventListener('click', function () {
-  if (stylesheet.getAttribute('href') === '/bootstrap/light.css') {
-    stylesheet.setAttribute('href', '/bootstrap/dark.css');
-    window.localStorage.setItem('color-theme', 'dark');
-  } else {
-    stylesheet.setAttribute('href', '/bootstrap/light.css');
-    window.localStorage.setItem('color-theme', 'light');
-  }
+const setTheme = typeof window.__setColorTheme === 'function'
+  ? window.__setColorTheme
+  : (theme) => {
+      if (stylesheet) {
+        const href = theme === 'dark' ? '/bootstrap/dark.css' : '/bootstrap/light.css';
+        stylesheet.setAttribute('href', href);
+      }
+      window.localStorage.setItem('color-theme', theme === 'dark' ? 'dark' : 'light');
+    };
+const getTheme = typeof window.__getColorTheme === 'function'
+  ? window.__getColorTheme
+  : () => {
+      const stored = window.localStorage.getItem('color-theme');
+      if (stored === 'dark' || stored === 'light') {
+        return stored;
+      }
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        return 'dark';
+      }
+      return 'light';
+    };
+const resetTheme = typeof window.__resetColorTheme === 'function'
+  ? window.__resetColorTheme
+  : () => {
+      window.localStorage.removeItem('color-theme');
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.querySelector('#custom-css')?.setAttribute('href', '/bootstrap/dark.css');
+      } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+        document.querySelector('#custom-css')?.setAttribute('href', '/bootstrap/light.css');
+      }
+    };
+
+document.getElementById('toggle-color-theme').addEventListener('click', function (event) {
+  event.preventDefault();
+  const current = getTheme();
+  setTheme(current === 'dark' ? 'light' : 'dark');
 });
 
-document.getElementById('reset-color-theme').addEventListener('click', function () {
-  window.localStorage.removeItem('color-theme');
-  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-    // Get OS preferred color scheme
-    document.querySelector('#custom-css').setAttribute('href', '/bootstrap/dark.css');
-  } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
-    document.querySelector('#custom-css').setAttribute('href', '/bootstrap/light.css');
-  }
+document.getElementById('reset-color-theme').addEventListener('click', function (event) {
+  event.preventDefault();
+  resetTheme();
 });
 
 document.getElementById('font-size').addEventListener('input', function () {

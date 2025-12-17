@@ -57,6 +57,22 @@ window.unlockQuestionRevealUntilAnswer = unlockQuestionRevealUntilAnswer;
 window.setQuestionLockOverlay = setQuestionLockOverlay;
 window.clearQuestionLockOverlay = () => setQuestionLockOverlay('');
 
+function invalidateCachedQuestions(reason = 'manual') {
+  if (typeof window.invalidateScienceBowlQuestionCache === 'function') {
+    window.invalidateScienceBowlQuestionCache(reason);
+    return;
+  }
+
+  if (window.room) {
+    if (Array.isArray(window.room.randomQuestionCache)) {
+      window.room.randomQuestionCache.length = 0;
+    }
+    if (Array.isArray(window.room.setCache)) {
+      window.room.setCache.length = 0;
+    }
+  }
+}
+
 function setQuestionLockOverlay (html) {
   questionLockOverlayHtml = typeof html === 'string' ? html : '';
   syncQuestionDisplayFromBuffer();
@@ -409,6 +425,7 @@ function setCategories ({ alternateSubcategories, categories, subcategories, per
     version: queryVersion
   }));
   window.localStorage.setItem('singleplayer-science-bowl-query', JSON.stringify({ ...room.query, version: queryVersion }));
+  invalidateCachedQuestions('categories-updated');
 }
 
 function setDifficulties ({ difficulties }) {
