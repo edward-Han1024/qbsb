@@ -36,15 +36,11 @@ export default class ClientScienceBowlRoom extends ScienceBowlRoom {
 
     this.checkAnswer = api.checkAnswer;
     this.getRandomQuestions = async (args = {}) => {
-            // Middle school sets use different subject labels; skip subject filtering when msMode is on
-            const useMsMode = this.msMode === true;
-            const subjectFilter = useMsMode
-              ? undefined
-              : Array.isArray(args.subjects)
-                ? args.subjects
-                : Array.isArray(args.categories)
-                  ? args.categories
-                  : this.query.subjects;
+      const subjectFilter = Array.isArray(args.subjects)
+        ? args.subjects
+        : Array.isArray(args.categories)
+          ? args.categories
+          : this.query.subjects;
       const competitionFilter = Array.isArray(args.competitions)
         ? args.competitions
         : this.query.competitions;
