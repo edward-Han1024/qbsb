@@ -438,7 +438,7 @@
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title me-2" id="category-modal-label">Select Categories</h5>
-            <button class="btn btn-primary me-1" id="toggle-all" onclick="console.log('Toggle all clicked. Current categories:', window.room.categoryManager.categories); window.room.categoryManager.import(window.room.categoryManager.categories.length === 0 ? {categories: ['MATH', 'PHYSICS', 'CHEMISTRY', 'BIOLOGY', 'EARTH AND SPACE', 'ENERGY']} : {}); window.room.categoryManager.loadCategoryModal(); window.room.query.subjects = window.room.categoryManager.categories; window.localStorage.setItem('singleplayer-science-bowl-categories', JSON.stringify({...window.room.categoryManager.export(), version: '2025-05-07'})); document.querySelectorAll('.category-checkbox').forEach(checkbox => checkbox.checked = window.room.categoryManager.categories.includes(checkbox.id)); window.invalidateScienceBowlQuestionCache && window.invalidateScienceBowlQuestionCache('categories');">Toggle all</button>
+            <button class="btn btn-primary me-1" id="toggle-all" onclick="console.log('Toggle all clicked. Current categories:', window.room.categoryManager.categories); const sbCategories = window.sbGetAvailableCategories ? window.sbGetAvailableCategories() : ['MATH', 'PHYSICS', 'CHEMISTRY', 'BIOLOGY', 'EARTH AND SPACE', 'ENERGY']; window.room.categoryManager.import(window.room.categoryManager.categories.length === 0 ? {categories: sbCategories} : {}); window.room.categoryManager.loadCategoryModal(); window.room.query.subjects = window.room.categoryManager.categories; window.localStorage.setItem('singleplayer-science-bowl-categories', JSON.stringify({...window.room.categoryManager.export(), version: '2025-05-07'})); document.querySelectorAll('.category-checkbox').forEach(checkbox => checkbox.checked = window.room.categoryManager.categories.includes(checkbox.id)); window.invalidateScienceBowlQuestionCache && window.invalidateScienceBowlQuestionCache('categories'); window.sbSyncScienceBowlCategoriesForMsMode && window.sbSyncScienceBowlCategoriesForMsMode(window.room.msMode);">Toggle all</button>
             <button class="btn btn-primary" id="toggle-percent-view" onclick="console.log('Percent view clicked. Current categories:', window.room.categoryManager.categories); window.room.categoryManager.percentView = !window.room.categoryManager.percentView; window.room.categoryManager.loadCategoryModal(); window.localStorage.setItem('singleplayer-science-bowl-categories', JSON.stringify({...window.room.categoryManager.export(), version: '2025-05-07'})); document.querySelectorAll('.category-checkbox').forEach(checkbox => checkbox.checked = window.room.categoryManager.categories.includes(checkbox.id)); window.invalidateScienceBowlQuestionCache && window.invalidateScienceBowlQuestionCache('categories');">% view</button>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
@@ -446,27 +446,27 @@
             <div class="row" id="non-percent-view">
               <div class="col-12" id="categories">
                 <h5 class="text-center">Category</h5>
-                <div>
+                <div data-category="MATH">
                   <input type="checkbox" class="btn-check category-checkbox" autocomplete="off" id="MATH" onclick="console.log('Category checkbox clicked: MATH. Current categories:', window.room.categoryManager.categories); window.room.categoryManager.updateCategory('MATH'); window.room.categoryManager.loadCategoryModal(); window.room.query.subjects = window.room.categoryManager.categories; window.localStorage.setItem('singleplayer-science-bowl-categories', JSON.stringify({...window.room.categoryManager.export(), version: '2025-05-07'})); document.querySelectorAll('.category-checkbox').forEach(checkbox => checkbox.checked = window.room.categoryManager.categories.includes(checkbox.id)); window.invalidateScienceBowlQuestionCache && window.invalidateScienceBowlQuestionCache('categories');">
                   <label class="btn btn-outline-primary w-100 rounded-0 my-1" for="MATH">MATH<br></label>
                 </div>
-                <div>
+                <div data-category="PHYSICS">
                   <input type="checkbox" class="btn-check category-checkbox" autocomplete="off" id="PHYSICS" onclick="console.log('Category checkbox clicked: PHYSICS. Current categories:', window.room.categoryManager.categories); window.room.categoryManager.updateCategory('PHYSICS'); window.room.categoryManager.loadCategoryModal(); window.room.query.subjects = window.room.categoryManager.categories; window.localStorage.setItem('singleplayer-science-bowl-categories', JSON.stringify({...window.room.categoryManager.export(), version: '2025-05-07'})); document.querySelectorAll('.category-checkbox').forEach(checkbox => checkbox.checked = window.room.categoryManager.categories.includes(checkbox.id)); window.invalidateScienceBowlQuestionCache && window.invalidateScienceBowlQuestionCache('categories');">
                   <label class="btn btn-outline-danger w-100 rounded-0 my-1" for="PHYSICS">PHYSICS<br></label>
                 </div>
-                <div>
+                <div data-category="CHEMISTRY">
                   <input type="checkbox" class="btn-check category-checkbox" autocomplete="off" id="CHEMISTRY" onclick="console.log('Category checkbox clicked: CHEMISTRY. Current categories:', window.room.categoryManager.categories); window.room.categoryManager.updateCategory('CHEMISTRY'); window.room.categoryManager.loadCategoryModal(); window.room.query.subjects = window.room.categoryManager.categories; window.localStorage.setItem('singleplayer-science-bowl-categories', JSON.stringify({...window.room.categoryManager.export(), version: '2025-05-07'})); document.querySelectorAll('.category-checkbox').forEach(checkbox => checkbox.checked = window.room.categoryManager.categories.includes(checkbox.id)); window.invalidateScienceBowlQuestionCache && window.invalidateScienceBowlQuestionCache('categories');">
                   <label class="btn btn-outline-warning w-100 rounded-0 my-1" for="CHEMISTRY">CHEMISTRY<br></label>
                 </div>
-                <div>
+                <div data-category="BIOLOGY">
                   <input type="checkbox" class="btn-check category-checkbox" autocomplete="off" id="BIOLOGY" onclick="console.log('Category checkbox clicked: BIOLOGY. Current categories:', window.room.categoryManager.categories); window.room.categoryManager.updateCategory('BIOLOGY'); window.room.categoryManager.loadCategoryModal(); window.room.query.subjects = window.room.categoryManager.categories; window.localStorage.setItem('singleplayer-science-bowl-categories', JSON.stringify({...window.room.categoryManager.export(), version: '2025-05-07'})); document.querySelectorAll('.category-checkbox').forEach(checkbox => checkbox.checked = window.room.categoryManager.categories.includes(checkbox.id)); window.invalidateScienceBowlQuestionCache && window.invalidateScienceBowlQuestionCache('categories');">
                   <label class="btn btn-outline-success w-100 rounded-0 my-1" for="BIOLOGY">BIOLOGY<br></label>
                 </div>
-                <div>
+                <div data-category="EARTH AND SPACE">
                   <input type="checkbox" class="btn-check category-checkbox" autocomplete="off" id="EARTH AND SPACE" onclick="console.log('Category checkbox clicked: EARTH AND SPACE. Current categories:', window.room.categoryManager.categories); window.room.categoryManager.updateCategory('EARTH AND SPACE'); window.room.categoryManager.loadCategoryModal(); window.room.query.subjects = window.room.categoryManager.categories; window.localStorage.setItem('singleplayer-science-bowl-categories', JSON.stringify({...window.room.categoryManager.export(), version: '2025-05-07'})); document.querySelectorAll('.category-checkbox').forEach(checkbox => checkbox.checked = window.room.categoryManager.categories.includes(checkbox.id)); window.invalidateScienceBowlQuestionCache && window.invalidateScienceBowlQuestionCache('categories');">
                   <label class="btn btn-outline-info w-100 rounded-0 my-1" for="EARTH AND SPACE">EARTH AND SPACE<br></label>
                 </div>
-                <div>
+                <div data-category="ENERGY">
                   <input type="checkbox" class="btn-check category-checkbox" autocomplete="off" id="ENERGY" onclick="console.log('Category checkbox clicked: ENERGY. Current categories:', window.room.categoryManager.categories); window.room.categoryManager.updateCategory('ENERGY'); window.room.categoryManager.loadCategoryModal(); window.room.query.subjects = window.room.categoryManager.categories; window.localStorage.setItem('singleplayer-science-bowl-categories', JSON.stringify({...window.room.categoryManager.export(), version: '2025-05-07'})); document.querySelectorAll('.category-checkbox').forEach(checkbox => checkbox.checked = window.room.categoryManager.categories.includes(checkbox.id)); window.invalidateScienceBowlQuestionCache && window.invalidateScienceBowlQuestionCache('categories');">
                   <label class="btn btn-outline-secondary w-100 rounded-0 my-1" for="ENERGY">ENERGY<br></label>
                 </div>
@@ -476,7 +476,7 @@
               <div class="col-12">
                 <table class="table">
                   <tbody>
-                    <tr>
+                    <tr data-category-row="MATH">
                       <th style="width: 50%">MATH</th>
                       <td style="width: 50%">
                         <span class="font-monospace me-1 category-percent">0%</span>
@@ -491,7 +491,7 @@
                         </div>
                       </td>
                     </tr>
-                    <tr>
+                    <tr data-category-row="PHYSICS">
                       <th>PHYSICS</th>
                       <td>
                         <span class="font-monospace me-1 category-percent">0%</span>
@@ -506,7 +506,7 @@
                         </div>
                       </td>
                     </tr>
-                    <tr>
+                    <tr data-category-row="CHEMISTRY">
                       <th>CHEMISTRY</th>
                       <td>
                         <span class="font-monospace me-1 category-percent">0%</span>
@@ -521,7 +521,7 @@
                         </div>
                       </td>
                     </tr>
-                    <tr>
+                    <tr data-category-row="BIOLOGY">
                       <th>BIOLOGY</th>
                       <td>
                         <span class="font-monospace me-1 category-percent">0%</span>
@@ -536,7 +536,7 @@
                         </div>
                       </td>
                     </tr>
-                    <tr>
+                    <tr data-category-row="EARTH AND SPACE">
                       <th>EARTH AND SPACE</th>
                       <td>
                         <span class="font-monospace me-1 category-percent">0%</span>
@@ -551,7 +551,7 @@
                         </div>
                       </td>
                     </tr>
-                    <tr>
+                    <tr data-category-row="ENERGY">
                       <th>ENERGY</th>
                       <td>
                         <span class="font-monospace me-1 category-percent">0%</span>
@@ -825,6 +825,82 @@
     <script type="module" src="/script.js"></script>
     <script type="module" src="index.min.js"></script>
     <script>
+        (function setupScienceBowlMsCategories () {
+            const CATEGORY_VERSION = '2025-05-07';
+            const CATEGORY_STORAGE_KEY = 'singleplayer-science-bowl-categories';
+            const CATEGORY_ORDER = ['MATH', 'PHYSICS', 'CHEMISTRY', 'BIOLOGY', 'EARTH AND SPACE', 'ENERGY'];
+            let chemistrySelectedBeforeMs = false;
+
+            function persistCategories(manager) {
+                if (!manager) { return; }
+                try {
+                    window.localStorage.setItem(CATEGORY_STORAGE_KEY, JSON.stringify({ ...manager.export(), version: CATEGORY_VERSION }));
+                } catch (error) {
+                    console.warn('[Science Bowl] Failed to persist category selection', error);
+                }
+            }
+
+            function syncCategoryCheckboxes(manager) {
+                if (!manager) { return; }
+                document.querySelectorAll('.category-checkbox').forEach((checkbox) => {
+                    checkbox.checked = manager.categories.includes(checkbox.id);
+                });
+            }
+
+            function updateCategoryLabels(isMsMode) {
+                const physicsLabel = document.querySelector('[data-category="PHYSICS"] label');
+                const physicsPercent = document.querySelector('[data-category-row="PHYSICS"] th');
+                const chemistryRow = document.querySelector('[data-category="CHEMISTRY"]');
+                const chemistryPercentRow = document.querySelector('[data-category-row="CHEMISTRY"]');
+                const labelText = isMsMode ? 'Physical Science' : 'PHYSICS';
+
+                if (physicsLabel) { physicsLabel.innerHTML = `${labelText}<br>`; }
+                if (physicsPercent) { physicsPercent.textContent = labelText; }
+                if (chemistryRow) { chemistryRow.classList.toggle('d-none', isMsMode); }
+                if (chemistryPercentRow) { chemistryPercentRow.classList.toggle('d-none', isMsMode); }
+            }
+
+            function syncCategoryState(isMsMode) {
+                const manager = window.room?.categoryManager;
+                if (!manager) { return; }
+
+                if (isMsMode) {
+                    chemistrySelectedBeforeMs = manager.categories.includes('CHEMISTRY');
+                    manager.categories = manager.categories.filter((cat) => cat !== 'CHEMISTRY');
+                } else if (chemistrySelectedBeforeMs && !manager.categories.includes('CHEMISTRY')) {
+                    manager.categories.push('CHEMISTRY');
+                    chemistrySelectedBeforeMs = false;
+                } else {
+                    chemistrySelectedBeforeMs = false;
+                }
+
+                if (window.room?.query) {
+                    window.room.query.subjects = manager.categories;
+                }
+                manager.loadCategoryModal?.();
+                syncCategoryCheckboxes(manager);
+                persistCategories(manager);
+                window.invalidateScienceBowlQuestionCache?.('categories');
+            }
+
+            function getAvailableCategories() {
+                const isMsMode = !!(window.room?.msMode ?? document.getElementById('toggle-ms-mode')?.checked);
+                return isMsMode ? CATEGORY_ORDER.filter((cat) => cat !== 'CHEMISTRY') : CATEGORY_ORDER;
+            }
+
+            window.sbGetAvailableCategories = getAvailableCategories;
+            window.sbSyncScienceBowlCategoriesForMsMode = (isMsMode) => {
+                updateCategoryLabels(isMsMode);
+                syncCategoryState(isMsMode);
+            };
+
+            document.addEventListener('DOMContentLoaded', () => {
+                const msModeEnabled = !!document.getElementById('toggle-ms-mode')?.checked;
+                window.sbSyncScienceBowlCategoriesForMsMode(msModeEnabled);
+            });
+        })();
+    </script>
+    <script>
         (function setupCompetitionFilters () {
             const QUERY_STORAGE_KEY = 'singleplayer-science-bowl-query';
             const QUERY_VERSION = '2025-05-07';
@@ -981,6 +1057,7 @@
             msMode = loadSavedMsMode();
             const initialState = getSelectionState();
             assignSelectionToRoom(initialState.competitions, { exclude: initialState.exclude });
+            window.sbSyncScienceBowlCategoriesForMsMode?.(msMode);
 
             document.addEventListener('DOMContentLoaded', () => {
                 syncCheckboxes();
@@ -994,6 +1071,7 @@
                         persistMsMode();
                         syncCompetitionControlsDisabled();
                         updateRoomCompetitions();
+                        window.sbSyncScienceBowlCategoriesForMsMode?.(msMode);
                     });
                 }
 
