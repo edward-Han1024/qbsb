@@ -175,7 +175,18 @@ export default class ScienceBowlRoom extends QuestionRoom {
       return '';
     }
 
-    const words = normalized.split(' ');
+    // Remove bracketed notes and parenthetical "read as" guidance from the text we read aloud
+    const sanitized = normalized
+      .replace(/\[[^\]]*\]/g, ' ')
+      .replace(/\(\s*read\s*as[^)]*\)/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!sanitized) {
+      return '';
+    }
+
+    const words = sanitized.split(' ');
     if (words.length % 2 === 0) {
       const half = words.length / 2;
       const firstHalf = words.slice(0, half).join(' ').trim();
@@ -189,7 +200,7 @@ export default class ScienceBowlRoom extends QuestionRoom {
       }
     }
 
-    return normalized;
+    return sanitized;
   }
 
   async readQuestion(expectedReadTime) {
