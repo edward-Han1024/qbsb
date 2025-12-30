@@ -300,6 +300,13 @@
                         <label class="form-check-label" for="toggle-speech">Enable text-to-speech</label>
                     </div>
                     <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" id="toggle-ai-questions" type="checkbox" role="switch">
+                        <label class="form-check-label" for="toggle-ai-questions">AI Questions</label>
+                        <div class="form-text">
+                            Pulls from an AI-generated question set.
+                        </div>
+                    </div>
+                    <div class="form-check form-switch mb-3">
                         <input class="form-check-input" id="toggle-ms-mode" type="checkbox" role="switch">
                         <label class="form-check-label" for="toggle-ms-mode">Middle school questions</label>
                         <div class="form-text">
@@ -931,13 +938,16 @@
             const QUERY_VERSION = '2025-05-07';
             const COMPETITIONS = ['SMH', 'NSB', 'BASH', 'SSB'];
             const MIDDLE_SCHOOL_COMPETITION = 'MSNSB';
+            const AI_COMPETITION = 'RAG';
             const MODE_STORAGE_KEY = 'singleplayer-science-bowl-level';
             const CHECKBOX_SELECTOR = '.competition-checkbox';
             const MS_SWITCH_ID = 'toggle-ms-mode';
+            const AI_SWITCH_ID = 'toggle-ai-questions';
             const COMPETITION_BUTTON_ID = 'competition-select-button';
+            const MODES = { HS: 'HS', MS: 'MS', AI: 'AI' };
 
             let cachedSelection = [];
-            let msMode = false;
+            let mode = MODES.HS;
             let roomSyncInterval = null;
             let pendingSelection = [];
             let pendingExclude = [];
@@ -961,9 +971,11 @@
                 return normalizeSelection(saved.competitions);
             }
 
-            function loadSavedMsMode () {
+            function loadSavedMode () {
                 const saved = safeParse(window.localStorage.getItem(MODE_STORAGE_KEY));
-                return saved?.mode === 'MS';
+                if (saved?.mode === MODES.MS) { return MODES.MS; }
+                if (saved?.mode === MODES.AI) { return MODES.AI; }
+                return MODES.HS;
             }
 
             function persistSelection (selection = cachedSelection) {
@@ -977,11 +989,11 @@
                 }
             }
 
-            function persistMsMode () {
+            function persistMode () {
                 try {
-                    window.localStorage.setItem(MODE_STORAGE_KEY, JSON.stringify({ mode: msMode ? 'MS' : 'HS' }));
+                    window.localStorage.setItem(MODE_STORAGE_KEY, JSON.stringify({ mode }));
                 } catch (error) {
-                    console.warn('[Science Bowl] Failed to persist MS/HS mode', error);
+                    console.warn('[Science Bowl] Failed to persist MS/HS/AI mode', error);
                 }
             }
 
@@ -1019,7 +1031,8 @@
 
                 window.room.query.competitions = pendingSelection.slice();
                 window.room.excludeCompetitions = pendingExclude.slice();
-                window.room.msMode = msMode;
+                window.room.msMode = mode === MODES.MS;
+                window.room.aiQuestionsMode = mode === MODES.AI;
                 invalidateQuestionCaches('competition filters');
             }
 
@@ -1037,10 +1050,11 @@
             }
 
             function getSelectionState () {
-                if (msMode) { return { competitions: [MIDDLE_SCHOOL_COMPETITION], exclude: [] }; }
+                if (mode === MODES.AI) { return { competitions: [AI_COMPETITION], exclude: [] }; }
+                if (mode === MODES.MS) { return { competitions: [MIDDLE_SCHOOL_COMPETITION], exclude: [] }; }
                 const sanitized = normalizeSelection(cachedSelection);
                 if (sanitized.length > 0) { return { competitions: sanitized, exclude: [] }; }
-                return { competitions: [], exclude: [MIDDLE_SCHOOL_COMPETITION] };
+                return { competitions: [], exclude: [MIDDLE_SCHOOL_COMPETITION, AI_COMPETITION] };
             }
 
             function updateRoomCompetitions () {
@@ -1055,7 +1069,7 @@
             }
 
             function syncCompetitionControlsDisabled () {
-                const disabled = msMode;
+                const disabled = mode !== MODES.HS;
                 const button = document.getElementById(COMPETITION_BUTTON_ID);
                 if (button) {
                     if (!competitionButtonState.target) { competitionButtonState.target = button.getAttribute('data-bs-target'); }
@@ -1079,10 +1093,10 @@
             }
 
             cachedSelection = loadInitialSelection();
-            msMode = loadSavedMsMode();
+            mode = loadSavedMode();
             const initialState = getSelectionState();
             assignSelectionToRoom(initialState.competitions, { exclude: initialState.exclude });
-            window.sbSyncScienceBowlCategoriesForMsMode?.(msMode);
+            window.sbSyncScienceBowlCategoriesForMsMode?.(mode === MODES.MS);
 
             document.addEventListener('DOMContentLoaded', () => {
                 syncCheckboxes();
@@ -1090,13 +1104,33 @@
 
                 const msSwitch = document.getElementById(MS_SWITCH_ID);
                 if (msSwitch) {
-                    msSwitch.checked = msMode;
+                    msSwitch.checked = mode === MODES.MS;
                     msSwitch.addEventListener('change', () => {
-                        msMode = msSwitch.checked;
-                        persistMsMode();
+                        mode = msSwitch.checked ? MODES.MS : (document.getElementById(AI_SWITCH_ID)?.checked ? MODES.AI : MODES.HS);
+                        if (msSwitch.checked) {
+                            const aiSwitch = document.getElementById(AI_SWITCH_ID);
+                            if (aiSwitch) { aiSwitch.checked = false; }
+                        }
+                        persistMode();
                         syncCompetitionControlsDisabled();
                         updateRoomCompetitions();
-                        window.sbSyncScienceBowlCategoriesForMsMode?.(msMode);
+                        window.sbSyncScienceBowlCategoriesForMsMode?.(mode === MODES.MS);
+                    });
+                }
+
+                const aiSwitch = document.getElementById(AI_SWITCH_ID);
+                if (aiSwitch) {
+                    aiSwitch.checked = mode === MODES.AI;
+                    aiSwitch.addEventListener('change', () => {
+                        mode = aiSwitch.checked ? MODES.AI : (document.getElementById(MS_SWITCH_ID)?.checked ? MODES.MS : MODES.HS);
+                        if (aiSwitch.checked) {
+                            const msSwitchEl = document.getElementById(MS_SWITCH_ID);
+                            if (msSwitchEl) { msSwitchEl.checked = false; }
+                        }
+                        persistMode();
+                        syncCompetitionControlsDisabled();
+                        updateRoomCompetitions();
+                        window.sbSyncScienceBowlCategoriesForMsMode?.(mode === MODES.MS);
                     });
                 }
 
