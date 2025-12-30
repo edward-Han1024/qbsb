@@ -26,6 +26,22 @@ const USER_ID = 'user';
 const USERNAME = 'user';
 const VERSION = '2025-05-07';
 
+function normalizeStrictnessForValidation(raw) {
+  const numeric = Number.parseInt(raw, 10);
+  if (Number.isNaN(numeric)) { return 7; }
+  return Math.max(0, Math.min(20, Math.round(numeric / 5)));
+}
+
+function describeStrictness(value) {
+  const v = Number.parseInt(value, 10);
+  if (Number.isNaN(v)) { return 'More forgiving (accepts near-matches/spelling slips).'; }
+  if (v <= 20) return 'Very forgiving – take intent even with typos.';
+  if (v <= 40) return 'Forgiving – allow close paraphrases and small typos.';
+  if (v <= 60) return 'Balanced – prefers correct wording but allows obvious intent.';
+  if (v <= 80) return 'Precise – needs clear match and key qualifiers.';
+  return 'Strict – close to exact wording required.';
+}
+
 const room = new ClientScienceBowlRoom();
 // Flags that let inline legacy scripts know the modern handlers exist
 window.__sbModernScienceBowlClient = true;
@@ -433,10 +449,14 @@ function setDifficulties ({ difficulties }) {
 }
 
 function setStrictness ({ strictness }) {
+  room.settings.strictness = strictness;
+  room.settings.strictnessNormalized = normalizeStrictnessForValidation(strictness);
   const el = document.getElementById('set-strictness');
   const disp = document.getElementById('strictness-display');
+  const note = document.getElementById('strictness-note');
   if (el) el.value = strictness;
   if (disp) disp.textContent = strictness;
+  if (note) note.textContent = describeStrictness(strictness);
   window.localStorage.setItem('singleplayer-science-bowl-settings', JSON.stringify({ ...room.settings, version: settingsVersion }));
 }
 
@@ -677,7 +697,13 @@ document.addEventListener('DOMContentLoaded', () => {
   if (savedSettings) {
     const settings = JSON.parse(savedSettings);
     if (settings.version === settingsVersion) {
-      room.settings = { ...room.settings, ...settings };
+      let strictnessRaw = settings.strictness;
+      if (typeof strictnessRaw === 'number' && strictnessRaw <= 20 && settings.strictnessNormalized === undefined) {
+        // Old scale (0-20) -> convert to slider scale (0-100)
+        strictnessRaw = Math.min(100, Math.max(0, Math.round(strictnessRaw * 5)));
+      }
+      room.settings = { ...room.settings, ...settings, strictness: strictnessRaw };
+      room.settings.strictnessNormalized = normalizeStrictnessForValidation(room.settings.strictness);
       const elAi = document.getElementById('toggle-ai-mode'); if (elAi) elAi.checked = room.settings.aiMode;
       const elReb = document.getElementById('toggle-rebuzz'); if (elReb) elReb.checked = room.settings.rebuzz;
       const elHist = document.getElementById('toggle-show-history'); if (elHist) elHist.checked = room.settings.showHistory;
@@ -685,6 +711,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const elType = document.getElementById('type-to-answer'); if (elType) elType.checked = room.settings.typeToAnswer;
       const elStrict = document.getElementById('set-strictness'); if (elStrict) elStrict.value = room.settings.strictness;
       const elStrictDisp = document.getElementById('strictness-display'); if (elStrictDisp) elStrictDisp.textContent = room.settings.strictness;
+      const elStrictNote = document.getElementById('strictness-note'); if (elStrictNote) elStrictNote.textContent = describeStrictness(room.settings.strictness);
       const elSpeed = document.getElementById('reading-speed'); if (elSpeed) elSpeed.value = room.settings.readingSpeed;
       const elSpeedDisp = document.getElementById('reading-speed-display'); if (elSpeedDisp) elSpeedDisp.textContent = room.settings.readingSpeed;
     }
@@ -838,7 +865,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const elStrictness = document.getElementById('set-strictness');
   if (elStrictness) {
     elStrictness.addEventListener('input', (e) => {
-      room.message(USER_ID, { type: 'set-strictness', strictness: parseInt(e.target.value) });
+      const rawValue = Number.parseInt(e.target.value, 10);
+      if (Number.isNaN(rawValue)) { return; }
+      const clamped = Math.max(0, Math.min(100, rawValue));
+      if (e.target.value !== String(clamped)) {
+        e.target.value = clamped;
+      }
+      const disp = document.getElementById('strictness-display');
+      const note = document.getElementById('strictness-note');
+      if (disp) disp.textContent = clamped;
+      if (note) note.textContent = describeStrictness(clamped);
+      room.message(USER_ID, { type: 'set-strictness', strictness: clamped });
     });
   }
 

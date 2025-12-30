@@ -320,6 +320,13 @@
                         <input class="form-range" id="reading-speed" type="range" min="0" max="100" step="5" value="50">
                     <div class="form-text">Slide left for slower reading, right for faster.</div>
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="set-strictness">
+                            Answer strictness: <span id="strictness-display">40</span>/100
+                        </label>
+                        <input class="form-range" id="set-strictness" type="range" min="0" max="100" step="5" value="40">
+                        <div class="form-text" id="strictness-note">More forgiving (accepts near-matches/spelling slips).</div>
+                    </div>
                     <div class="mb-2"></div>
                 </div>
             </div>
@@ -1648,7 +1655,7 @@
             const resp = await fetch('/api/ai-help/equivalence', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ question, correctAnswer, userAnswer, category: sbGetCurrentCategory() })
+              body: JSON.stringify({ question, correctAnswer, userAnswer, category: sbGetCurrentCategory(), strictness: sbGetStrictnessValue() })
             });
             console.log('[SBAI] plead response', { ok: resp.ok, status: resp.status, ct: resp.headers.get('content-type') });
             const ct = resp.headers.get('content-type') || '';
@@ -1775,6 +1782,28 @@
           } catch (_) {}
           const checked = document.querySelector('.category-checkbox:checked');
           return checked?.id || 'Science';
+        }
+
+        function sbGetStrictnessValue() {
+          const slider = document.getElementById('set-strictness');
+          if (slider) {
+            const raw = parseInt(slider.value, 10);
+            if (!Number.isNaN(raw)) {
+              return Math.max(0, Math.min(100, raw));
+            }
+          }
+          try {
+            if (window.room && typeof room.settings?.strictness === 'number') {
+              return Math.max(0, Math.min(100, room.settings.strictness));
+            }
+          } catch (_) {}
+          return 40;
+        }
+
+        function sbNormalizeStrictnessForValidator(raw) {
+          const n = parseInt(raw, 10);
+          if (Number.isNaN(n)) { return 7; }
+          return Math.max(0, Math.min(20, Math.round(n / 5)));
         }
 
         async function sbGetAIExplanation() {
@@ -2337,11 +2366,9 @@
                     isPaused = false;
                     clearAudioReadingNotice({ unlockQuestion: true });
                 }
-                
-                // Only send the buzz message if the modern handlers are not active
-                if (legacyHandlersActive()) {
-                    window.room.message('user', { type: 'buzz' });
-                }
+
+                // Always send buzz to room so answering works in both modern and legacy flows
+                window.room.message('user', { type: 'buzz' });
             });
         }
 
@@ -2447,70 +2474,27 @@
         document.getElementById('answer-form').addEventListener('submit', function(event) {
             event.preventDefault();
             event.stopPropagation();
-            
-            if (!legacyHandlersActive()) {
-                return;
-            }
 
-            const answer = document.getElementById('answer-input').value;
+            const answerInput = document.getElementById('answer-input');
+            const answer = (answerInput?.value || '').trim();
             console.log('Answer submitted:', answer);
-            
+            if (!answer) { return; }
             if (!window.room) {
                 console.error('Room not initialized');
                 return;
             }
 
-            // Get the current question's correct answer
-            const correctAnswer = window.room.tossup?.answer;
-            console.log('Attempting to get correct answer:', {
-                correctAnswer,
-                tossup: window.room.tossup
-            });
+            // Prefer the modern flow: send give-answer to the room and let the client handle correctness/score.
+            try {
+                window.room.message('user', { type: 'give-answer', givenAnswer: answer });
+            } catch (err) {
+                console.error('Error sending give-answer message:', err);
+            }
 
-            if (!correctAnswer) {
-                console.error('No correct answer available for current question');
-                return;
-            }
-            
-            // Get the current strictness setting (default to 7 if control is absent)
-            const strictnessEl = document.getElementById('set-strictness');
-            const strictness = strictnessEl ? (parseInt(strictnessEl.value) || 7) : 7;
-            
-            // Validate the answer
-            const validationResult = validateAnswer(answer, correctAnswer, strictness);
-            console.log('Answer validation result:', validationResult);
-            
-            // If answer is correct, update the UI score (legacy fallback only)
-            if (validationResult.isCorrect) {
-                const statline = document.getElementById('statline');
-                const isTossup = window.room?.tossup?.isTossup === true;
-                const increment = isTossup ? 4 : 10;
-                const currentScore = statline ? (parseInt(statline.textContent.split(': ')[1]) || 0) : 0;
-                const newScore = currentScore + increment;
-                if (statline) {
-                    statline.textContent = `SCORE: ${newScore}`;
-                }
-            }
-            
-            // Call revealAnswer with the necessary data
-            revealAnswer({
-                type: 'reveal-answer',
-                question: window.room.questionSplit.join(' '),
-                answer: answer,
-                correctAnswer: correctAnswer
-            });
-            
             // Clear and hide input
-            document.getElementById('answer-input').value = '';
-            document.getElementById('answer-input-group').classList.add('d-none');
-            
-            // Send answer to room with validation result
-            window.room.message('user', { 
-                type: 'give-answer', 
-                givenAnswer: answer,
-                isCorrect: validationResult.isCorrect,
-                matchType: validationResult.matchType
-            });
+            if (answerInput) answerInput.value = '';
+            const group = document.getElementById('answer-input-group');
+            if (group) group.classList.add('d-none');
         });
 
         // Initialize room state (legacy only)
@@ -3362,6 +3346,48 @@
             observer.observe(answerDisplay, { childList: true, subtree: true, characterData: true });
             window.sbSyncAnswerPanels?.();
         })();
+    </script>
+    <script>
+        // Lightweight helpers to keep strictness UI in sync and ensure answer box is focusable after buzzing.
+        document.addEventListener('DOMContentLoaded', () => {
+            const slider = document.getElementById('set-strictness');
+            const disp = document.getElementById('strictness-display');
+            const note = document.getElementById('strictness-note');
+            const descriptions = [
+                { max: 20, text: 'Very forgiving – take intent even with typos.' },
+                { max: 40, text: 'Forgiving – allow close paraphrases and small typos.' },
+                { max: 60, text: 'Balanced – prefers correct wording but allows obvious intent.' },
+                { max: 80, text: 'Precise – needs clear match and key qualifiers.' },
+                { max: 100, text: 'Strict – close to exact wording required.' }
+            ];
+            function updateStrictnessUI(value) {
+                if (disp) disp.textContent = value;
+                if (note) {
+                    const match = descriptions.find(d => value <= d.max) || descriptions[descriptions.length - 1];
+                    note.textContent = match.text;
+                }
+            }
+            if (slider) {
+                const current = Math.max(0, Math.min(100, parseInt(slider.value, 10) || 40));
+                updateStrictnessUI(current);
+                slider.addEventListener('input', () => {
+                    const val = Math.max(0, Math.min(100, parseInt(slider.value, 10) || 0));
+                    updateStrictnessUI(val);
+                });
+            }
+
+            // Ensure answer box is available after buzzing
+            const buzzBtn = document.getElementById('buzz');
+            const answerInputGroup = document.getElementById('answer-input-group');
+            const answerInput = document.getElementById('answer-input');
+            if (buzzBtn && answerInputGroup && answerInput) {
+                buzzBtn.addEventListener('click', () => {
+                    answerInputGroup.classList.remove('d-none');
+                    answerInput.disabled = false;
+                    answerInput.focus();
+                });
+            }
+        });
     </script>
     
     <!-- Subject Statistics Table - Bottom Right Corner -->

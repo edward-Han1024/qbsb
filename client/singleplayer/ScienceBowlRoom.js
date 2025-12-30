@@ -3,6 +3,13 @@ import QuestionRoom from '../../quizbowl/QuestionRoom.js';
 import ScienceBowlCategoryManager from '../../quizbowl/ScienceBowlCategoryManager.js';
 import { validateAnswer } from './science-bowl/answer-validator.js';
 
+function normalizeStrictnessForValidation(raw) {
+  const numeric = Number.parseInt(raw, 10);
+  if (Number.isNaN(numeric)) { return 7; }
+  // Map 0-100 slider into roughly 0-20 range expected by validator
+  return Math.max(0, Math.min(20, Math.round(numeric / 5)));
+}
+
 function normalizeScienceBowlQuestion(question) {
   if (!question || typeof question !== 'object') { return question; }
   if (typeof question.isTossup === 'boolean') { return question; }
@@ -37,7 +44,8 @@ export default class ScienceBowlRoom extends QuestionRoom {
       showHistory: true,
       typeToAnswer: true,
       timer: true,
-      strictness: 7,
+      strictness: 40,
+      strictnessNormalized: normalizeStrictnessForValidation(40),
       readingSpeed: 50
     };
 
@@ -385,8 +393,10 @@ export default class ScienceBowlRoom extends QuestionRoom {
   }
 
   setStrictness(userId, { strictness }) {
-    this.settings.strictness = strictness;
-    this.emitMessage({ type: 'set-strictness', strictness, userId });
+    const numeric = Math.max(0, Math.min(100, Number.parseInt(strictness, 10)));
+    this.settings.strictness = Number.isNaN(numeric) ? this.settings.strictness : numeric;
+    this.settings.strictnessNormalized = normalizeStrictnessForValidation(this.settings.strictness);
+    this.emitMessage({ type: 'set-strictness', strictness: this.settings.strictness, userId });
   }
 
   setReadingSpeed(userId, { readingSpeed }) {
@@ -512,18 +522,19 @@ export default class ScienceBowlRoom extends QuestionRoom {
       });
       
       // Extract the letter and full answer from the answer line
-      const answerMatch = this.tossup.answer.match(/^([A-Z])\)\s*(.+)$/);
+      const answerMatch = this.tossup.answer.match(/^([A-Za-z])\)\s*(.+)$/i);
       console.log('Answer match result:', answerMatch);
       
       if (answerMatch) {
-        const [, letter, fullAnswer] = answerMatch;
+        const [, letterRaw, fullAnswer] = answerMatch;
+        const letter = (letterRaw || '').toUpperCase();
         console.log('Extracted answer parts:', { letter, fullAnswer });
         
         // Create a combined answer string with both letter and full answer
         const combinedAnswer = `${letter} (ACCEPT: ${fullAnswer})`;
         
         // Use the validateAnswer function to check the answer
-        const validationResult = validateAnswer(givenAnswer, combinedAnswer, this.settings.strictness);
+        const validationResult = validateAnswer(givenAnswer, combinedAnswer, this.settings.strictnessNormalized);
         isCorrect = validationResult.isCorrect;
         console.log('Final isCorrect result (MCQ):', isCorrect);
       }
@@ -532,7 +543,7 @@ export default class ScienceBowlRoom extends QuestionRoom {
         givenAnswer,
         correctAnswer: this.tossup.answer
       });
-      const validationResult = validateAnswer(givenAnswer, this.tossup.answer, this.settings.strictness);
+      const validationResult = validateAnswer(givenAnswer, this.tossup.answer, this.settings.strictnessNormalized);
       isCorrect = validationResult.isCorrect;
       console.log('Final isCorrect result (free-response):', isCorrect, validationResult);
     }
