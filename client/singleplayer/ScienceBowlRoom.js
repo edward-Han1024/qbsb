@@ -73,6 +73,7 @@ export default class ScienceBowlRoom extends QuestionRoom {
     this.questionSplit = [];
     this.wordIndex = 0;
     this.tossupProgress = 'NOT_STARTED';
+    this.currentQuestionKey = null;
   }
 
   async message(userId, message) {
@@ -126,6 +127,7 @@ export default class ScienceBowlRoom extends QuestionRoom {
     // Clear any running timers
     clearTimeout(this.timeoutID);
     clearInterval(this.timer?.interval);
+    this.clearPendingOptionTimeouts();
     this.emitMessage({ type: 'timer-update', timeRemaining: 0 });
 
     console.log('ScienceBowlRoom: next() called');
@@ -149,6 +151,7 @@ export default class ScienceBowlRoom extends QuestionRoom {
       return;
     }
 
+    this.currentQuestionKey = question?._id || question?.id || `q-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     this.questionSplit = questionText.split(' ').filter(word => word !== '');
     this.wordIndex = 0;
     this.tossupProgress = 'READING';
@@ -162,8 +165,24 @@ export default class ScienceBowlRoom extends QuestionRoom {
     this.emitMessage({ type: 'question', question });
     
     // Start reading the question
-    this.readQuestion(Date.now());
+    this.readQuestion(Date.now(), this.currentQuestionKey);
     return question;
+  }
+
+  clearPendingOptionTimeouts() {
+    const optionTimeoutKeys = [
+      'optionTimeout0',
+      'optionTimeout1',
+      'optionTimeout2',
+      'optionTimeout3',
+      'optionTimeoutFinal'
+    ];
+    optionTimeoutKeys.forEach((key) => {
+      if (this[key]) {
+        clearTimeout(this[key]);
+        this[key] = null;
+      }
+    });
   }
 
   getNormalizedQuestionText(question) {
@@ -203,7 +222,12 @@ export default class ScienceBowlRoom extends QuestionRoom {
     return sanitized;
   }
 
-  async readQuestion(expectedReadTime) {
+  async readQuestion(expectedReadTime, questionKey = this.currentQuestionKey) {
+    if (questionKey && questionKey !== this.currentQuestionKey) {
+      console.log('ScienceBowlRoom: Stale readQuestion invocation skipped', { questionKey, currentQuestionKey: this.currentQuestionKey });
+      return;
+    }
+
     if (!this.questionSplit || this.wordIndex >= this.questionSplit.length) {
       // Start timer when question finishes reading
       if (!this.buzzedIn) {
@@ -254,6 +278,7 @@ export default class ScienceBowlRoom extends QuestionRoom {
         
         // Add a small delay before showing options
         this.optionTimeout0 = setTimeout(() => {
+          if (questionKey && questionKey !== this.currentQuestionKey) { return; }
           // If someone has buzzed in during the delay, don't show options
           if (this.buzzedIn) {
             console.log('ScienceBowlRoom: Someone buzzed in during delay, stopping options reading');
@@ -262,10 +287,11 @@ export default class ScienceBowlRoom extends QuestionRoom {
 
           // Emit each option with a delay
           this.tossup.options.forEach((option, index) => {
-            this[`optionTimeout${index + 1}`] = setTimeout(() => {
-              // If someone has buzzed in during option reading, stop
-              if (this.buzzedIn) {
-                console.log('ScienceBowlRoom: Someone buzzed in during option reading, stopping');
+              this[`optionTimeout${index + 1}`] = setTimeout(() => {
+                if (questionKey && questionKey !== this.currentQuestionKey) { return; }
+                // If someone has buzzed in during option reading, stop
+                if (this.buzzedIn) {
+                  console.log('ScienceBowlRoom: Someone buzzed in during option reading, stopping');
                 return;
               }
 
@@ -277,6 +303,7 @@ export default class ScienceBowlRoom extends QuestionRoom {
               // If this is the last option, start the timer
               if (index === this.tossup.options.length - 1) {
                 this.optionTimeoutFinal = setTimeout(() => {
+                  if (questionKey && questionKey !== this.currentQuestionKey) { return; }
                   if (!this.buzzedIn) {
                     const timerDuration = this.tossup?.isTossup ? 50 : 200;
                     this.startServerTimer(
@@ -330,8 +357,9 @@ export default class ScienceBowlRoom extends QuestionRoom {
     });
 
     this.timeoutID = setTimeout(() => {
+      if (questionKey && questionKey !== this.currentQuestionKey) { return; }
       if (!this.paused && !this.buzzedIn) {
-        this.readQuestion(time + expectedReadTime);
+        this.readQuestion(time + expectedReadTime, questionKey);
       }
     }, delay);
   }
