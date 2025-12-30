@@ -99,4 +99,10 @@ router.post('/', (req, res) => {
   res.json({ source: 'session', stats: formatted });
 });
 
+router.delete('/', (req, res) => {
+  req.session.scienceBowlStats = {};
+  const stats = ensureSessionStats(req.session);
+  res.json({ source: 'session', stats: formatStats(stats) });
+});
+
 export default router;

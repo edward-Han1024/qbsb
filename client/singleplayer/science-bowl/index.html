@@ -1572,6 +1572,21 @@
           }
         }
 
+        function sbMarkScoreAndAnswersCorrect() {
+          const statline = document.getElementById('statline');
+          if (statline) {
+            statline.classList.remove('text-danger');
+            statline.classList.add('text-success');
+          }
+          ['answer-display', 'user-answer'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) {
+              el.classList.remove('text-danger');
+              el.classList.add('text-success');
+            }
+          });
+        }
+
         function sbRenderPleadResult(equivalent, verdictText) {
           const content = document.getElementById('plead-result-content');
           if (!content) return;
@@ -1684,8 +1699,10 @@
                   if (player) {
                     const isTossup = room.previous?.tossup?.isTossup === true;
                     const increment = isTossup ? 4 : 10;
-                    const currentScore = (typeof player.score === 'number' && !Number.isNaN(player.score)) ? player.score : 0;
-                    player.score = currentScore + increment;
+                    const baseScore = (room.previous && typeof room.previous.scoreBeforeJudge === 'number')
+                      ? room.previous.scoreBeforeJudge
+                      : ((typeof player.score === 'number' && !Number.isNaN(player.score)) ? player.score : 0);
+                    player.score = baseScore + increment;
                     if (typeof window.updateStatDisplay === 'function') {
                       window.updateStatDisplay(player);
                     }
@@ -1724,6 +1741,7 @@
                 });
               }
               window.refreshScienceBowlSubjectStats?.();
+              sbMarkScoreAndAnswersCorrect();
             } else {
               if (btn) btn.textContent = 'Not accepted';
             }
@@ -2972,6 +2990,7 @@
             const container = document.getElementById('subject-stats-container');
             const statsBody = document.getElementById('subject-stats-body');
             const refreshButton = document.getElementById('refresh-subject-stats');
+            const clearButton = document.getElementById('clear-subject-stats');
             const collapseButton = document.getElementById('toggle-subject-stats');
             const STATS_COLLAPSE_KEY = 'singleplayer-science-bowl-stats-collapsed';
             let statsCollapsed = window.localStorage.getItem(STATS_COLLAPSE_KEY) === 'true';
@@ -2982,11 +3001,15 @@
                 return;
             }
 
-            function setLoadingState () {
-                statsBody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Loading stats...</td></tr>';
+            function setLoadingState (message = 'Loading stats...') {
+                statsBody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">${message}</td></tr>`;
                 if (refreshButton) {
                     refreshButton.disabled = true;
                     refreshButton.textContent = 'Loading...';
+                }
+                if (clearButton) {
+                    clearButton.disabled = true;
+                    clearButton.textContent = 'Working...';
                 }
             }
 
@@ -2998,6 +3021,10 @@
                 if (refreshButton) {
                     refreshButton.disabled = false;
                     refreshButton.textContent = 'Refresh';
+                }
+                if (clearButton) {
+                    clearButton.disabled = false;
+                    clearButton.textContent = 'Clear';
                 }
             }
 
@@ -3131,7 +3158,30 @@
                 applyStatsCollapseState();
             });
 
+            async function clearSubjectStats () {
+                if (loading) { return; }
+                loading = true;
+                setLoadingState('Clearing stats...');
+                try {
+                    const resp = await fetch('/api/science-bowl/session-stats', { method: 'DELETE' });
+                    if (!resp.ok) {
+                        const text = await resp.text();
+                        throw new Error(text || `Clear failed (${resp.status})`);
+                    }
+                    window.sbSubjectStatAdjustments = {};
+                    loading = false;
+                    finishLoading();
+                    await loadSubjectStats();
+                } catch (error) {
+                    console.error('[SB Stats] Error clearing subject stats:', error);
+                    setErrorState(`Error clearing stats: ${error?.message || error}`);
+                    loading = false;
+                    finishLoading();
+                }
+            }
+
             refreshButton?.addEventListener('click', loadSubjectStats);
+            clearButton?.addEventListener('click', clearSubjectStats);
             loadSubjectStats();
 
             window.refreshScienceBowlSubjectStats = function refreshScienceBowlSubjectStats () {
@@ -3398,6 +3448,7 @@
                 <button class="btn btn-sm btn-outline-secondary" id="toggle-subject-stats" type="button" aria-expanded="true" title="Collapse stats">
                     <i class="bi bi-chevron-down collapse-toggle-icon"></i>
                 </button>
+                <button class="btn btn-sm btn-outline-danger" id="clear-subject-stats" type="button">Clear</button>
                 <button class="btn btn-sm btn-outline-secondary" id="refresh-subject-stats" type="button">Refresh</button>
             </div>
         </div>

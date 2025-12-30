@@ -203,6 +203,12 @@ async function giveAnswer ({ directive, directedPrompt, perQuestionCelerity, sco
     const buzzedDuringReading = isTossup && typeof perQuestionCelerity === 'number' && perQuestionCelerity > 0;
     player.score = (typeof player.score === 'number' && !Number.isNaN(player.score)) ? player.score : 0;
 
+    // Keep a snapshot before adjusting, so AI equivalence can award based on the pre-judgment score.
+    room.previous = room.previous || {};
+    room.previous.scoreBeforeJudge = player.score;
+    room.previous.pointsForQuestion = pointsForQuestion;
+    room.previous.buzzedDuringReading = buzzedDuringReading;
+
     if (isCorrect) {
       player.score += pointsForQuestion;
     } else if (buzzedDuringReading) {

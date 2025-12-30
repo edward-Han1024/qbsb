@@ -48,6 +48,55 @@ function normalizeText(text) {
         .trim();
 }
 
+// Computes Damerau-Levenshtein distance (counts transpositions as a single edit)
+function damerauLevenshtein(a, b) {
+    const lenA = a.length;
+    const lenB = b.length;
+    const INF = lenA + lenB;
+    const da = {};
+    const score = Array.from({ length: lenA + 2 }, () => Array(lenB + 2).fill(0));
+
+    score[0][0] = INF;
+    for (let i = 0; i <= lenA; i++) {
+        score[i + 1][0] = INF;
+        score[i + 1][1] = i;
+    }
+    for (let j = 0; j <= lenB; j++) {
+        score[0][j + 1] = INF;
+        score[1][j + 1] = j;
+    }
+
+    for (let i = 1; i <= lenA; i++) {
+        let db = 0;
+        const aChar = a[i - 1];
+        for (let j = 1; j <= lenB; j++) {
+            const bChar = b[j - 1];
+            const i1 = da[bChar] || 0;
+            const j1 = db;
+            const cost = aChar === bChar ? 0 : 1;
+            if (cost === 0) db = j;
+
+            score[i + 1][j + 1] = Math.min(
+                score[i][j] + cost, // substitution
+                score[i + 1][j] + 1, // insertion
+                score[i][j + 1] + 1, // deletion
+                score[i1][j1] + (i - i1 - 1) + 1 + (j - j1 - 1) // transposition
+            );
+        }
+        da[aChar] = i;
+    }
+
+    return score[lenA + 1][lenB + 1];
+}
+
+// Determines allowed typo distance based on answer length and strictness (0-20)
+function getTypoThreshold(length, strictness) {
+    const clampedStrictness = Math.max(0, Math.min(20, strictness || 0));
+    const base = length <= 4 ? 1 : length <= 10 ? 2 : 3;
+    const penalty = Math.floor(clampedStrictness / 10); // reduces tolerance when strictness is high
+    return Math.max(0, base - penalty);
+}
+
 /**
  * Checks if the user's answer matches the correct answer
  * @param {string} userAnswer - The answer provided by the user
@@ -127,6 +176,24 @@ function validateAnswer(userAnswer, correctAnswer, strictness = 7) {
                 matchType: 'exact',
                 userAnswer: userAnswer,
                 correctAnswer: correctAnswer
+            };
+        }
+    }
+
+    // Lenient typo handling using Damerau-Levenshtein distance
+    const typoCandidates = new Set([normalizedMainAnswer, ...normalizedAlternates, ...correctAnswers]);
+    for (const candidate of typoCandidates) {
+        const threshold = getTypoThreshold(Math.max(normalizedUserAnswer.length, candidate.length), strictness);
+        if (threshold === 0) continue;
+        const distance = damerauLevenshtein(normalizedUserAnswer, candidate);
+        if (distance <= threshold) {
+            return {
+                isCorrect: true,
+                matchType: 'typo',
+                userAnswer: userAnswer,
+                correctAnswer: correctAnswer,
+                distance,
+                allowedDistance: threshold
             };
         }
     }

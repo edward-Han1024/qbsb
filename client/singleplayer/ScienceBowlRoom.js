@@ -82,6 +82,7 @@ export default class ScienceBowlRoom extends QuestionRoom {
     this.wordIndex = 0;
     this.tossupProgress = 'NOT_STARTED';
     this.currentQuestionKey = null;
+    this.optionsReadComplete = true;
   }
 
   async message(userId, message) {
@@ -163,6 +164,7 @@ export default class ScienceBowlRoom extends QuestionRoom {
     this.questionSplit = questionText.split(' ').filter(word => word !== '');
     this.wordIndex = 0;
     this.tossupProgress = 'READING';
+    this.optionsReadComplete = !(question?.is_mcq && Array.isArray(question?.options) && question.options.length > 0);
 
     // For Science Bowl questions, isTossup is already a boolean field
     // No need to convert from type enum
@@ -310,6 +312,7 @@ export default class ScienceBowlRoom extends QuestionRoom {
               
               // If this is the last option, start the timer
               if (index === this.tossup.options.length - 1) {
+                this.optionsReadComplete = true;
                 this.optionTimeoutFinal = setTimeout(() => {
                   if (questionKey && questionKey !== this.currentQuestionKey) { return; }
                   if (!this.buzzedIn) {
@@ -534,7 +537,7 @@ export default class ScienceBowlRoom extends QuestionRoom {
         const combinedAnswer = `${letter} (ACCEPT: ${fullAnswer})`;
         
         // Use the validateAnswer function to check the answer
-        const validationResult = validateAnswer(givenAnswer, combinedAnswer, this.settings.strictnessNormalized);
+        const validationResult = validateAnswer(givenAnswer, combinedAnswer, 7); // fixed strictness for MCQ
         isCorrect = validationResult.isCorrect;
         console.log('Final isCorrect result (MCQ):', isCorrect);
       }
@@ -553,10 +556,11 @@ export default class ScienceBowlRoom extends QuestionRoom {
     const remainingLength = Array.isArray(this.questionSplit)
       ? this.questionSplit.slice(this.wordIndex).join(' ').length
       : 0;
+    const hasMcqOptions = this.tossup?.is_mcq && Array.isArray(this.tossup?.options) && this.tossup.options.length > 0;
     const perQuestionCelerity = totalLength > 0 ? (remainingLength / totalLength) : 0;
-    const endOfQuestion = Array.isArray(this.questionSplit)
-      ? this.wordIndex >= this.questionSplit.length
-      : true;
+    const endOfQuestion = hasMcqOptions
+      ? this.optionsReadComplete
+      : (Array.isArray(this.questionSplit) ? this.wordIndex >= this.questionSplit.length : true);
 
     // Store the result in previous
     this.previous = {
