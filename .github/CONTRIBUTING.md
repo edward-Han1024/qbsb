@@ -3,9 +3,9 @@ Users interested in contributing to this repository should read this document be
 # Running the Server
 
 1. Clone the repository and navigate to its root directory.
-   e.g. `git clone https://github.com/qbreader/website && cd website`
+   e.g. `git clone https://github.com/namsysid/qbsb && cd qbsb
 2. Run `npm install`.
-3. Create a `.env` file in the root of the directory, and insert values for `MONGODB_USERNAME` and `MONGODB_PASSWORD` (will need to ask me for credentials).
+3. Create a `.env` file in the root of the directory, and insert values for `MONGODB_USERNAME` and `MONGODB_PASSWORD` (will need to ask me for credentials), as well as an OPENAI_API_KEY variable.
 4. Run `npm start`.
    The website is at localhost:3000
 
