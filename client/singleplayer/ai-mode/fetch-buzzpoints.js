@@ -8,7 +8,7 @@ function buildCacheKey(questionId, level) {
  * Fetch precomputed buzzpoints for a question/difficulty.
  * @param {object} params
  * @param {string} params.questionId
- * @param {'beginner'|'intermediate'|'advanced'} params.level
+ * @param {'beginner'|'advanced'} params.level
  * @returns {Promise<{wordIndex: number, probCorrect: number} | null>}
  */
 export default async function fetchBuzzpoints({ questionId, level }) {

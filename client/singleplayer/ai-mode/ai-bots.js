@@ -89,7 +89,6 @@ const aiBots = {
   'right-after-power': [rightAfterPower, 'Buzz right after the power mark'],
   'buzz-randomly': [buzzRandomly, 'Buzz at a random point in the question (50% chance of being correct)'],
   'ai-buzz-beginner': [buildBuzzpointBot('beginner'), 'Uses AI-precomputed buzzpoints (beginner)'],
-  'ai-buzz-intermediate': [buildBuzzpointBot('intermediate'), 'Uses AI-precomputed buzzpoints (intermediate)'],
   'ai-buzz-advanced': [buildBuzzpointBot('advanced'), 'Uses AI-precomputed buzzpoints (advanced)']
 };
 

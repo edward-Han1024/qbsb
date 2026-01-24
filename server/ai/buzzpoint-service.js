@@ -1,11 +1,29 @@
 import 'dotenv/config';
 
+import fs from 'fs';
+import path from 'path';
 import { ObjectId } from 'mongodb';
 import { scienceBowl } from '../../database/databases.js';
 
-export const BUZZ_PROMPT_VERSION = '2025-02-05';
+export const BUZZ_PROMPT_VERSION = '2025-02-07';
 const DEFAULT_MODEL = process.env.AI_BUZZ_MODEL || 'gpt-4o-mini';
 const DEBUG = process.env.AI_BUZZ_DEBUG === 'true';
+let EXEMPLARS_CACHE = null;
+
+function loadBuzzExemplars() {
+  if (EXEMPLARS_CACHE !== null) return EXEMPLARS_CACHE;
+  const filePath = path.resolve(process.cwd(), 'logen.txt');
+  try {
+    const content = fs.readFileSync(filePath, 'utf8').trim();
+    EXEMPLARS_CACHE = content ? content : '';
+  } catch (error) {
+    if (DEBUG) {
+      console.warn('[AI-BUZZ][DEBUG] Failed to load logen.txt exemplars:', error.message);
+    }
+    EXEMPLARS_CACHE = '';
+  }
+  return EXEMPLARS_CACHE;
+}
 
 /**
  * Normalize question text to the same form that the reader uses when emitting words.
@@ -65,7 +83,6 @@ function appendOptionsToQuestion(questionText, question) {
 function buildBuzzPrompt({ questionText, category, words }) {
   const levels = [
     { id: 'beginner', description: 'newer player who needs more of the clue' },
-    { id: 'intermediate', description: 'solid high-school player' },
     { id: 'advanced', description: 'strong player who can buzz early' }
   ];
 
@@ -73,9 +90,14 @@ function buildBuzzPrompt({ questionText, category, words }) {
     (level) => `"${level.id}": { "buzz_last_words": "exact last 6 words that will be read before buzzing (include options if they are read, or use the reserved token AFTER to denote buzzing exactly at the end)", "prob_correct": 0.0-1.0, "text_line": "One line summary for this level" }`
   ).join(',\n');
 
-  return `List the buzzing points in the following Science Bowl question and accuracy (including negs as wrong) for Beginner, Intermediate, and Advanced Science Bowl players. 
+  const exemplars = loadBuzzExemplars();
+  const exemplarsBlock = exemplars ? `\nExamples (from logen.txt; follow format and ordering):\n${exemplars}\n` : '';
+
+  return `List the buzzing points in the following Science Bowl question and accuracy (including negs as wrong) for Beginner and Advanced Science Bowl players. 
 Take into account experience, hesitation, interrupting, and negging (interrupting before the question ends and getting it wrong), and knowledge gained.
-The goal is to imitate a live player at each level. Remember, beginners buzz late into the question (most likely seconds after the end of question/answer choices) and know less, advanced players buzz early and know more, intermediates are in between.
+The goal is to imitate a live player at each level. Remember, beginners buzz usually at the end of questions and answer choices and know less, advanced players buzz early (at beginning of answer choices, or in the middle of the question) and know more.
+Take into account key patterns in science bowl and the individual questions that may assist advanced players.
+Advanced players always would buzz before beginners. It also should be logical - nobody can buzz before hearing at least some of the necessary factors (that can't be guesssed).
 
 You must return strict JSON only, nothing else, with this exact shape:
 {
@@ -84,10 +106,10 @@ You must return strict JSON only, nothing else, with this exact shape:
 }
 
 Field rules (follow exactly):
-- buzz_last_words: exactly the last 6 words (or fewer if fewer remain) heard before buzzing; include answer choices if they would be read. Use the reserved token "AFTER" if buzzing at the exact end of the question/options.
+- buzz_last_words: exactly the last 6 words (or fewer if fewer remain) heard before buzzing; include answer choices in your deliberation if they would be read (but advanced can still skip them if they would know the answer). Use the reserved token "AFTER" if buzzing at the exact end of the question/options.
 - prob_correct: probability of answering correctly at that buzz point (0.0-1.0; include negging as incorrect).
 - text_line: a single line in the format "Level: <last 6 words or AFTER> — <percent>% correct".
-
+${exemplarsBlock}
 Sanitized question (use for word positions, include options if present): ${questionText}
 Category: ${category || 'Science'}`;
 }
@@ -127,7 +149,6 @@ function findWordIndexFromPhrase(phrase, words) {
 function fallbackWordIndexForLevel(level, wordsLength) {
   const fractions = {
     beginner: 0.9,
-    intermediate: 0.7,
     advanced: 0.45
   };
   const frac = fractions[level] ?? 0.7;
@@ -144,7 +165,7 @@ export function parseBuzzResponse({ content, words }) {
   }
 
   const result = {};
-  ['beginner', 'intermediate', 'advanced'].forEach((level) => {
+  ['beginner', 'advanced'].forEach((level) => {
     const entry = parsed[level];
     if (!entry) return;
     const probCorrect = normalizeProbability(entry.prob_correct);
@@ -152,8 +173,9 @@ export function parseBuzzResponse({ content, words }) {
       ? entry.buzz_last_words.trim()
       : (typeof entry.buzz_phrase === 'string' ? entry.buzz_phrase.trim() : '');
     const isEndToken = phraseRaw?.toUpperCase?.() === 'AFTER';
+    const containsAfter = !isEndToken && /\bAFTER\b/i.test(phraseRaw || '');
     const phrase = phraseRaw;
-    const derivedWordIndex = isEndToken
+    const derivedWordIndex = (isEndToken || containsAfter)
       ? words.length
       : (phrase ? findWordIndexFromPhrase(phrase, words) : words.length);
     const wordIndex = clampWordIndex(derivedWordIndex ?? fallbackWordIndexForLevel(level, words.length), words.length);
@@ -167,6 +189,9 @@ export function parseBuzzResponse({ content, words }) {
   });
 
   if (Object.keys(result).length === 0) return null;
+  if (result.beginner && result.advanced && result.beginner.wordIndex < result.advanced.wordIndex) {
+    result.beginner.wordIndex = result.advanced.wordIndex;
+  }
   return result;
 }
 
