@@ -81,6 +81,7 @@ export default class ScienceBowlRoom extends QuestionRoom {
     this.questionSplit = [];
     this.wordIndex = 0;
     this.tossupProgress = 'NOT_STARTED';
+    this.aiLockout = false;
     this.currentQuestionKey = null;
     this.optionsReadComplete = true;
   }
@@ -164,6 +165,9 @@ export default class ScienceBowlRoom extends QuestionRoom {
     this.questionSplit = questionText.split(' ').filter(word => word !== '');
     this.wordIndex = 0;
     this.tossupProgress = 'READING';
+    this.aiLockout = false;
+    this.buzzedIn = null;
+    this.buzzes = [];
     this.optionsReadComplete = !(question?.is_mcq && Array.isArray(question?.options) && question.options.length > 0);
 
     // For Science Bowl questions, isTossup is already a boolean field
@@ -287,21 +291,19 @@ export default class ScienceBowlRoom extends QuestionRoom {
         this.emitMessage({ type: 'update-question', word });
         
         // Add a small delay before showing options
-        this.optionTimeout0 = setTimeout(() => {
-          if (questionKey && questionKey !== this.currentQuestionKey) { return; }
-          // If someone has buzzed in during the delay, don't show options
-          if (this.buzzedIn) {
+          this.optionTimeout0 = setTimeout(() => {
+          // If someone has buzzed in during the delay, don't show options (unless AI)
+          if (this.buzzedIn && !(typeof this.buzzedIn === 'string' && this.buzzedIn.startsWith('ai'))) {
             console.log('ScienceBowlRoom: Someone buzzed in during delay, stopping options reading');
             return;
           }
 
           // Emit each option with a delay
           this.tossup.options.forEach((option, index) => {
-              this[`optionTimeout${index + 1}`] = setTimeout(() => {
-                if (questionKey && questionKey !== this.currentQuestionKey) { return; }
-                // If someone has buzzed in during option reading, stop
-                if (this.buzzedIn) {
-                  console.log('ScienceBowlRoom: Someone buzzed in during option reading, stopping');
+            this[`optionTimeout${index + 1}`] = setTimeout(() => {
+              // If someone has buzzed in during option reading, stop (unless AI)
+              if (this.buzzedIn && !(typeof this.buzzedIn === 'string' && this.buzzedIn.startsWith('ai'))) {
+                console.log('ScienceBowlRoom: Someone buzzed in during option reading, stopping');
                 return;
               }
 
@@ -450,6 +452,10 @@ export default class ScienceBowlRoom extends QuestionRoom {
 
   buzz(userId) {
     console.log('ScienceBowlRoom: buzz() called');
+    if (this.aiLockout && !(typeof userId === 'string' && userId.startsWith('ai'))) {
+      console.log('ScienceBowlRoom: AI lockout active; ignoring user buzz');
+      return;
+    }
     if (!this.settings.rebuzz && this.buzzes?.includes(userId)) { 
       console.log('ScienceBowlRoom: User already buzzed in');
       return; 
@@ -459,7 +465,7 @@ export default class ScienceBowlRoom extends QuestionRoom {
       return; 
     }
 
-    const username = this.players[userId].username;
+    const username = this.players[userId]?.username || userId;
     if (this.buzzedIn) {
       console.log('ScienceBowlRoom: Someone already buzzed in');
       this.emitMessage({ type: 'lost-buzzer-race', userId, username });
@@ -473,7 +479,7 @@ export default class ScienceBowlRoom extends QuestionRoom {
     this.buzzes.push(userId);
     this.paused = false;
 
-    console.log('ScienceBowlRoom: Emitting buzz message');
+    console.log('ScienceBowlRoom: Emitting buzz message', { userId });
     this.emitMessage({ type: 'buzz', userId, username });
     this.emitMessage({ type: 'update-question', word: '(#)' });
 
@@ -501,20 +507,8 @@ export default class ScienceBowlRoom extends QuestionRoom {
     clearInterval(this.timer?.interval);
     this.emitMessage({ type: 'timer-update', timeRemaining: 0 });
 
-    // Reset buzzed in state and stop reading
-    this.buzzedIn = null;
-    this.tossupProgress = 'ANSWER_REVEALED';
-    
-    // Clear any pending option reading timeouts
-    if (this.tossup?.is_mcq && this.tossup?.options) {
-      // Clear all pending timeouts for options
-      clearTimeout(this.optionTimeout0);
-      for (let i = 0; i < this.tossup.options.length; i++) {
-        clearTimeout(this[`optionTimeout${i + 1}`]);
-      }
-      clearTimeout(this.optionTimeoutFinal);
-    }
-
+    const isAiUser = typeof userId === 'string' && userId.startsWith('ai');
+    console.debug('[AI-BUZZ][room] giveAnswer', { userId, isAiUser, givenAnswer });
     // For multiple-choice questions, check both the letter and full answer
     let isCorrect = false;
     if (this.tossup?.is_mcq && this.tossup?.answer) {
@@ -551,6 +545,23 @@ export default class ScienceBowlRoom extends QuestionRoom {
       console.log('Final isCorrect result (free-response):', isCorrect, validationResult);
     }
 
+    // Reset buzzed in state and stop reading
+    this.buzzedIn = null;
+    this.tossupProgress = 'ANSWER_REVEALED';
+    
+    // Clear any pending option reading timeouts
+    if (this.tossup?.is_mcq && this.tossup?.options) {
+      const shouldClearOptions = !isAiUser || isCorrect;
+      if (shouldClearOptions) {
+        // Clear all pending timeouts for options
+        clearTimeout(this.optionTimeout0);
+        for (let i = 0; i < this.tossup.options.length; i++) {
+          clearTimeout(this[`optionTimeout${i + 1}`]);
+        }
+        clearTimeout(this.optionTimeoutFinal);
+      }
+    }
+
     const questionText = Array.isArray(this.questionSplit) ? this.questionSplit.join(' ') : '';
     const totalLength = questionText.length;
     const remainingLength = Array.isArray(this.questionSplit)
@@ -572,12 +583,45 @@ export default class ScienceBowlRoom extends QuestionRoom {
       userId
     };
 
+    if (isAiUser) {
+      this.aiLockout = isCorrect;
+      this.tossupProgress = isCorrect ? 'ANSWER_REVEALED' : 'READING';
+      this.emitMessage({
+        type: 'give-answer',
+        directive: isCorrect ? 'accept' : 'reject',
+        isCorrect,
+        tossup: this.tossup,
+        userId,
+        perQuestionCelerity,
+        endOfQuestion,
+        givenAnswer
+      });
+      if (isCorrect) {
+        this.emitMessage({
+          type: 'reveal-answer',
+          question: this.questionSplit.join(' '),
+          answer: givenAnswer,
+          correctAnswer: this.tossup?.answer,
+          isCorrect: true,
+          userId,
+          directive: 'accept'
+        });
+        return true;
+      }
+
+      if (!this.paused && !this.buzzedIn) {
+        setTimeout(() => this.readQuestion(Date.now()), 50);
+      }
+      return true;
+    }
+
     // Emit the answer with directive
     this.emitMessage({
       type: 'reveal-answer',
       question: this.questionSplit.join(' '),
       answer: givenAnswer,
       correctAnswer: this.tossup?.answer,
+      userId,
       isCorrect,
       directive: isCorrect ? 'accept' : 'reject'
     });
@@ -590,7 +634,8 @@ export default class ScienceBowlRoom extends QuestionRoom {
       tossup: this.tossup,
       userId,
       perQuestionCelerity,
-      endOfQuestion
+      endOfQuestion,
+      givenAnswer
     });
 
     return true;

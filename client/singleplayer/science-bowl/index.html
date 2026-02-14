@@ -294,7 +294,15 @@
                         <button class="btn btn-outline-primary" id="competition-select-button" data-bs-target="#competition-modal"
                             data-bs-toggle="modal" type="button">Competitions</button>
                     </div>
-                    <!-- AI mode toggle removed -->
+                    <div class="mb-3">
+                        <label class="form-label" for="ai-opponent-select">AI Opponent</label>
+                        <select class="form-select" id="ai-opponent-select">
+                            <option value="none" selected>No opponent</option>
+                            <option value="beginner">Beginner AI</option>
+                            <option value="advanced">Advanced AI</option>
+                        </select>
+                        <div class="form-text">AI will buzz and answer automatically. You can only buzz after an AI miss.</div>
+                    </div>
                     <hr>
                     <!-- Removed: Type to answer, Allow rebuzzes, Show question history, Enable timer -->
                     <div class="form-check form-switch mb-2">
@@ -339,9 +347,8 @@
                         <div class="score-panel">
                             <span id="statline">SCORE: 0</span>
                         </div>
-                        <div class="flex-grow-1 d-flex justify-content-center">
-                            <button class="btn btn-outline-info" id="question-type-button" data-bs-target="#question-type-modal"
-                                data-bs-toggle="modal" type="button">Question Type</button>
+                        <div class="score-panel d-none" id="ai-answer-panel">
+                            <span id="ai-answer-display">AI ANSWER: </span>
                         </div>
                         <div class="ms-auto d-flex flex-wrap gap-2" id="buttons">
                             <button class="btn btn-primary" id="start" data-bs-toggle="tooltip" data-bs-placement="top"
@@ -897,6 +904,52 @@
     <script type="module" src="/bootstrap/bootstrap.bundle.min.js"></script>
     <script type="module" src="/script.js"></script>
     <script type="module" src="index.min.js"></script>
+    <script>
+        (function setupAiOpponentDropdown() {
+            const LOG_PREFIX = '[AI-BUZZ][ui]';
+
+            function log(...args) {
+                console.log(LOG_PREFIX, ...args);
+            }
+
+            function applyChoice(choice) {
+                log('dropdown-change', { choice });
+                try {
+                    const room = window.room;
+                    if (!room) {
+                        log('no-room');
+                        return;
+                    }
+                    room.settings = room.settings || {};
+                    room.settings.aiOpponent = choice;
+                    const enableAi = choice !== 'none';
+                    room.message && room.message('user', { type: 'toggle-ai-mode', aiMode: enableAi });
+                    const stored = { ...(room.settings || {}), aiOpponent: choice, version: '2024-10-16' };
+                    window.localStorage.setItem('singleplayer-science-bowl-settings', JSON.stringify(stored));
+                } catch (err) {
+                    console.error(LOG_PREFIX, 'applyChoice failed', err);
+                }
+            }
+
+            function init() {
+                const select = document.getElementById('ai-opponent-select');
+                if (!select) {
+                    log('select-not-found');
+                    return;
+                }
+                log('select-found');
+                select.addEventListener('change', (e) => {
+                    applyChoice(e.target.value);
+                });
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', init);
+            } else {
+                init();
+            }
+        })();
+    </script>
     <script>
         (function setupScienceBowlMsCategories () {
             const CATEGORY_VERSION = '2025-05-07';
@@ -2940,6 +2993,9 @@
         function revealAnswer (message) {
             console.log('revealAnswer called with message:', message);
             const { answer, question, correctAnswer } = message;
+            const userId = message?.userId;
+            const isAiAnswer = typeof userId === 'string' && userId.startsWith('ai');
+            const isUserAnswer = userId === 'user';
             console.log('Destructured values:', { answer, question, correctAnswer });
             
             // Try both old and new element IDs
@@ -2960,7 +3016,7 @@
                 console.log('Using correct answer:', finalCorrectAnswer);
                 answerElement.innerHTML = 'ANSWER: ' + finalCorrectAnswer;
                 if (userAnswerElement) {
-                    userAnswerElement.innerHTML = 'YOUR ANSWER: ' + answer;
+                    userAnswerElement.innerHTML = isUserAnswer ? ('YOUR ANSWER: ' + answer) : '';
                 }
             } else {
                 console.log('Question or answer element not found:', { questionElement, answerElement });
@@ -2982,8 +3038,12 @@
             }
             if (startButton) startButton.disabled = false;
             if (toggleCorrectButton) {
-                toggleCorrectButton.classList.remove('d-none');
-                toggleCorrectButton.textContent = room.previous.isCorrect ? 'I was wrong' : 'I was right';
+                if (isUserAnswer && !isAiAnswer) {
+                    toggleCorrectButton.classList.remove('d-none');
+                    toggleCorrectButton.textContent = room.previous.isCorrect ? 'I was wrong' : 'I was right';
+                } else {
+                    toggleCorrectButton.classList.add('d-none');
+                }
             }
         }
 
@@ -3261,6 +3321,9 @@
 
             function handleMessageForStats (message) {
                 if (!message || message.type !== 'give-answer') {
+                    return;
+                }
+                if (message?.userId && message.userId !== 'user') {
                     return;
                 }
 

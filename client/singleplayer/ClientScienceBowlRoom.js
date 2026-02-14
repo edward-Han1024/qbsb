@@ -30,7 +30,8 @@ export default class ClientScienceBowlRoom extends ScienceBowlRoom {
 
     this.settings = {
       ...this.settings,
-      aiMode: false
+      aiMode: false,
+      aiOpponent: 'none'
     };
     this.excludeCompetitions = [];
 
