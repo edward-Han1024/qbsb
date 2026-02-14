@@ -2776,6 +2776,9 @@
         function revealAnswer (message) {
             console.log('revealAnswer called with message:', message);
             const { answer, question, correctAnswer } = message;
+            const userId = message?.userId;
+            const isAiAnswer = typeof userId === 'string' && userId.startsWith('ai');
+            const isUserAnswer = userId === 'user';
             console.log('Destructured values:', { answer, question, correctAnswer });
             
             // Try both old and new element IDs
@@ -2796,7 +2799,7 @@
                 console.log('Using correct answer:', finalCorrectAnswer);
                 answerElement.innerHTML = 'ANSWER: ' + finalCorrectAnswer;
                 if (userAnswerElement) {
-                    userAnswerElement.innerHTML = 'YOUR ANSWER: ' + answer;
+                    userAnswerElement.innerHTML = isUserAnswer ? ('YOUR ANSWER: ' + answer) : '';
                 }
             } else {
                 console.log('Question or answer element not found:', { questionElement, answerElement });
@@ -2818,8 +2821,12 @@
             }
             if (startButton) startButton.disabled = false;
             if (toggleCorrectButton) {
-                toggleCorrectButton.classList.remove('d-none');
-                toggleCorrectButton.textContent = room.previous.isCorrect ? 'I was wrong' : 'I was right';
+                if (isUserAnswer && !isAiAnswer) {
+                    toggleCorrectButton.classList.remove('d-none');
+                    toggleCorrectButton.textContent = room.previous.isCorrect ? 'I was wrong' : 'I was right';
+                } else {
+                    toggleCorrectButton.classList.add('d-none');
+                }
             }
         }
 
@@ -3065,6 +3072,9 @@
 
             function handleMessageForStats (message) {
                 if (!message || message.type !== 'give-answer') {
+                    return;
+                }
+                if (message?.userId && message.userId !== 'user') {
                     return;
                 }
 

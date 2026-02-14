@@ -580,6 +580,7 @@ export default class ScienceBowlRoom extends QuestionRoom {
       question: this.questionSplit.join(' '),
       answer: givenAnswer,
       correctAnswer: this.tossup?.answer,
+      userId,
       isCorrect,
       directive: isCorrect ? 'accept' : 'reject'
     });

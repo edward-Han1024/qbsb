@@ -402,6 +402,8 @@ function pause ({ paused }) {
 
 function revealAnswer ({ answer, question, correctAnswer, isCorrect, userId }) {
   console.log('revealAnswer called with:', { answer, question, correctAnswer, isCorrect, userId });
+  const isAi = typeof userId === 'string' && userId.startsWith('ai');
+  const isUserAnswer = userId === USER_ID;
   
   const elements = {
     question: document.getElementById('question'),
@@ -445,8 +447,7 @@ function revealAnswer ({ answer, question, correctAnswer, isCorrect, userId }) {
 
   if (elements.userAnswer) {
     console.log('Setting user answer content');
-    const isAi = typeof userId === 'string' && userId.startsWith('ai');
-    if (!isAi) {
+    if (isUserAnswer) {
       elements.userAnswer.innerHTML = 'YOUR ANSWER: ' + answer;
     } else {
       elements.userAnswer.innerHTML = '';
@@ -469,8 +470,7 @@ function revealAnswer ({ answer, question, correctAnswer, isCorrect, userId }) {
     elements.start.textContent = 'Next';
   }
   if (elements.toggleCorrect) {
-    const isAi = typeof userId === 'string' && userId.startsWith('ai');
-    if (isAi) {
+    if (!isUserAnswer) {
       elements.toggleCorrect.classList.add('d-none');
     } else {
       elements.toggleCorrect.classList.remove('d-none');
@@ -481,7 +481,6 @@ function revealAnswer ({ answer, question, correctAnswer, isCorrect, userId }) {
   }
   const aiAnswerPanel = document.getElementById('ai-answer-panel');
   const aiAnswerDisplay = document.getElementById('ai-answer-display');
-  const isAi = typeof userId === 'string' && userId.startsWith('ai');
   if (aiAnswerPanel && isAi) {
     aiAnswerPanel.classList.remove('d-none');
     if (aiAnswerDisplay) {
