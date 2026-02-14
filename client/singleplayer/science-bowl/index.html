@@ -310,6 +310,13 @@
                         <label class="form-check-label" for="toggle-speech">Enable text-to-speech</label>
                     </div>
                     <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" id="toggle-ai-questions" type="checkbox" role="switch">
+                        <label class="form-check-label" for="toggle-ai-questions">AI Questions</label>
+                        <div class="form-text">
+                            Pulls from an AI-generated question set.
+                        </div>
+                    </div>
+                    <div class="form-check form-switch mb-3">
                         <input class="form-check-input" id="toggle-ms-mode" type="checkbox" role="switch">
                         <label class="form-check-label" for="toggle-ms-mode">Middle school questions</label>
                         <div class="form-text">
@@ -322,6 +329,13 @@
                         </label>
                         <input class="form-range" id="reading-speed" type="range" min="0" max="100" step="5" value="50">
                     <div class="form-text">Slide left for slower reading, right for faster.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="set-strictness">
+                            Answer strictness: <span id="strictness-display">40</span>/100
+                        </label>
+                        <input class="form-range" id="set-strictness" type="range" min="0" max="100" step="5" value="40">
+                        <div class="form-text" id="strictness-note">More forgiving (accepts near-matches/spelling slips).</div>
                     </div>
                     <div class="mb-2"></div>
                 </div>
@@ -651,6 +665,34 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary" id="clear-competition-selection">Clear</button>
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Done</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="question-type-modal" tabindex="-1" aria-labelledby="question-type-modal-label">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="question-type-modal-label">Question Type</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">
+                        Choose whether to pull tossups, bonuses, or both. Leave everything unchecked (or check both) to allow all questions.
+                    </p>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input question-type-checkbox" type="checkbox" value="tossup" id="question-type-tossup">
+                        <label class="form-check-label" for="question-type-tossup">Tossups</label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input question-type-checkbox" type="checkbox" value="bonus" id="question-type-bonus">
+                        <label class="form-check-label" for="question-type-bonus">Bonuses</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" id="clear-question-type-selection">Clear</button>
                     <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Done</button>
                 </div>
             </div>
@@ -990,13 +1032,16 @@
             const QUERY_VERSION = '2025-05-07';
             const COMPETITIONS = ['SMH', 'NSB', 'BASH', 'SSB'];
             const MIDDLE_SCHOOL_COMPETITION = 'MSNSB';
+            const AI_COMPETITION = 'RAG';
             const MODE_STORAGE_KEY = 'singleplayer-science-bowl-level';
             const CHECKBOX_SELECTOR = '.competition-checkbox';
             const MS_SWITCH_ID = 'toggle-ms-mode';
+            const AI_SWITCH_ID = 'toggle-ai-questions';
             const COMPETITION_BUTTON_ID = 'competition-select-button';
+            const MODES = { HS: 'HS', MS: 'MS', AI: 'AI' };
 
             let cachedSelection = [];
-            let msMode = false;
+            let mode = MODES.HS;
             let roomSyncInterval = null;
             let pendingSelection = [];
             let pendingExclude = [];
@@ -1020,9 +1065,11 @@
                 return normalizeSelection(saved.competitions);
             }
 
-            function loadSavedMsMode () {
+            function loadSavedMode () {
                 const saved = safeParse(window.localStorage.getItem(MODE_STORAGE_KEY));
-                return saved?.mode === 'MS';
+                if (saved?.mode === MODES.MS) { return MODES.MS; }
+                if (saved?.mode === MODES.AI) { return MODES.AI; }
+                return MODES.HS;
             }
 
             function persistSelection (selection = cachedSelection) {
@@ -1036,11 +1083,11 @@
                 }
             }
 
-            function persistMsMode () {
+            function persistMode () {
                 try {
-                    window.localStorage.setItem(MODE_STORAGE_KEY, JSON.stringify({ mode: msMode ? 'MS' : 'HS' }));
+                    window.localStorage.setItem(MODE_STORAGE_KEY, JSON.stringify({ mode }));
                 } catch (error) {
-                    console.warn('[Science Bowl] Failed to persist MS/HS mode', error);
+                    console.warn('[Science Bowl] Failed to persist MS/HS/AI mode', error);
                 }
             }
 
@@ -1078,7 +1125,8 @@
 
                 window.room.query.competitions = pendingSelection.slice();
                 window.room.excludeCompetitions = pendingExclude.slice();
-                window.room.msMode = msMode;
+                window.room.msMode = mode === MODES.MS;
+                window.room.aiQuestionsMode = mode === MODES.AI;
                 invalidateQuestionCaches('competition filters');
             }
 
@@ -1096,10 +1144,11 @@
             }
 
             function getSelectionState () {
-                if (msMode) { return { competitions: [MIDDLE_SCHOOL_COMPETITION], exclude: [] }; }
+                if (mode === MODES.AI) { return { competitions: [AI_COMPETITION], exclude: [] }; }
+                if (mode === MODES.MS) { return { competitions: [MIDDLE_SCHOOL_COMPETITION], exclude: [] }; }
                 const sanitized = normalizeSelection(cachedSelection);
                 if (sanitized.length > 0) { return { competitions: sanitized, exclude: [] }; }
-                return { competitions: [], exclude: [MIDDLE_SCHOOL_COMPETITION] };
+                return { competitions: [], exclude: [MIDDLE_SCHOOL_COMPETITION, AI_COMPETITION] };
             }
 
             function updateRoomCompetitions () {
@@ -1114,7 +1163,7 @@
             }
 
             function syncCompetitionControlsDisabled () {
-                const disabled = msMode;
+                const disabled = mode !== MODES.HS;
                 const button = document.getElementById(COMPETITION_BUTTON_ID);
                 if (button) {
                     if (!competitionButtonState.target) { competitionButtonState.target = button.getAttribute('data-bs-target'); }
@@ -1138,10 +1187,10 @@
             }
 
             cachedSelection = loadInitialSelection();
-            msMode = loadSavedMsMode();
+            mode = loadSavedMode();
             const initialState = getSelectionState();
             assignSelectionToRoom(initialState.competitions, { exclude: initialState.exclude });
-            window.sbSyncScienceBowlCategoriesForMsMode?.(msMode);
+            window.sbSyncScienceBowlCategoriesForMsMode?.(mode === MODES.MS);
 
             document.addEventListener('DOMContentLoaded', () => {
                 syncCheckboxes();
@@ -1149,13 +1198,33 @@
 
                 const msSwitch = document.getElementById(MS_SWITCH_ID);
                 if (msSwitch) {
-                    msSwitch.checked = msMode;
+                    msSwitch.checked = mode === MODES.MS;
                     msSwitch.addEventListener('change', () => {
-                        msMode = msSwitch.checked;
-                        persistMsMode();
+                        mode = msSwitch.checked ? MODES.MS : (document.getElementById(AI_SWITCH_ID)?.checked ? MODES.AI : MODES.HS);
+                        if (msSwitch.checked) {
+                            const aiSwitch = document.getElementById(AI_SWITCH_ID);
+                            if (aiSwitch) { aiSwitch.checked = false; }
+                        }
+                        persistMode();
                         syncCompetitionControlsDisabled();
                         updateRoomCompetitions();
-                        window.sbSyncScienceBowlCategoriesForMsMode?.(msMode);
+                        window.sbSyncScienceBowlCategoriesForMsMode?.(mode === MODES.MS);
+                    });
+                }
+
+                const aiSwitch = document.getElementById(AI_SWITCH_ID);
+                if (aiSwitch) {
+                    aiSwitch.checked = mode === MODES.AI;
+                    aiSwitch.addEventListener('change', () => {
+                        mode = aiSwitch.checked ? MODES.AI : (document.getElementById(MS_SWITCH_ID)?.checked ? MODES.MS : MODES.HS);
+                        if (aiSwitch.checked) {
+                            const msSwitchEl = document.getElementById(MS_SWITCH_ID);
+                            if (msSwitchEl) { msSwitchEl.checked = false; }
+                        }
+                        persistMode();
+                        syncCompetitionControlsDisabled();
+                        updateRoomCompetitions();
+                        window.sbSyncScienceBowlCategoriesForMsMode?.(mode === MODES.MS);
                     });
                 }
 
@@ -1170,6 +1239,159 @@
 
                 document.getElementById('competition-modal')?.addEventListener('show.bs.modal', () => {
                     syncCheckboxes(cachedSelection);
+                });
+            });
+        })();
+    </script>
+    <script>
+        (function setupQuestionTypeFilter () {
+            const QUERY_STORAGE_KEY = 'singleplayer-science-bowl-query';
+            const QUERY_VERSION = '2025-05-07';
+            const CHECKBOX_SELECTOR = '.question-type-checkbox';
+            const CLEAR_BUTTON_ID = 'clear-question-type-selection';
+            const MODAL_ID = 'question-type-modal';
+            const BUTTON_ID = 'question-type-button';
+
+            let selection = null;
+            let allSelectionState = 'none';
+            let roomSyncInterval = null;
+
+            function safeParse (value) {
+                if (typeof value !== 'string' || value.length === 0) { return null; }
+                try { return JSON.parse(value); } catch (error) {
+                    console.warn('[Science Bowl] Failed to parse saved query state for question type', error);
+                    return null;
+                }
+            }
+
+            function selectionFromBoolean (value) {
+                if (value === true) { return 'tossup'; }
+                if (value === false) { return 'bonus'; }
+                return null;
+            }
+
+            function persistSelection (isTossupValue) {
+                try {
+                    const saved = safeParse(window.localStorage.getItem(QUERY_STORAGE_KEY));
+                    const baseQuery = {
+                        ...(window.room?.query || {}),
+                        ...(saved?.version === QUERY_VERSION ? saved : {})
+                    };
+                    if (typeof isTossupValue === 'boolean') {
+                        baseQuery.isTossup = isTossupValue;
+                    } else {
+                        delete baseQuery.isTossup;
+                    }
+                    window.localStorage.setItem(QUERY_STORAGE_KEY, JSON.stringify({ ...baseQuery, version: QUERY_VERSION }));
+                } catch (error) {
+                    console.warn('[Science Bowl] Failed to persist question type filter', error);
+                }
+            }
+
+            function updateButtonLabel (currentSelection = selection) {
+                const button = document.getElementById(BUTTON_ID);
+                if (!button) { return; }
+                if (currentSelection === 'tossup') {
+                    button.textContent = 'Question Type: Tossups';
+                    return;
+                }
+                if (currentSelection === 'bonus') {
+                    button.textContent = 'Question Type: Bonuses';
+                    return;
+                }
+                button.textContent = 'Question Type';
+            }
+
+            function syncCheckboxes (currentSelection = selection) {
+                const checkBoth = currentSelection === null && allSelectionState === 'both';
+                document.querySelectorAll(CHECKBOX_SELECTOR).forEach((input) => {
+                    if (currentSelection === 'tossup') {
+                        input.checked = input.value === 'tossup';
+                    } else if (currentSelection === 'bonus') {
+                        input.checked = input.value === 'bonus';
+                    } else if (checkBoth) {
+                        input.checked = true;
+                    } else {
+                        input.checked = false;
+                    }
+                });
+            }
+
+            function applySelectionToRoom (nextSelection = selection) {
+                selection = nextSelection;
+                const isTossupValue = selection === 'tossup' ? true : selection === 'bonus' ? false : undefined;
+
+                const assign = () => {
+                    if (!window.room || !window.room.query) { return false; }
+                    if (typeof isTossupValue === 'boolean') {
+                        window.room.query.isTossup = isTossupValue;
+                    } else {
+                        delete window.room.query.isTossup;
+                    }
+                    window.invalidateScienceBowlQuestionCache?.('question type filter');
+                    return true;
+                };
+
+                if (!assign() && roomSyncInterval === null) {
+                    roomSyncInterval = setInterval(() => {
+                        if (assign()) {
+                            clearInterval(roomSyncInterval);
+                            roomSyncInterval = null;
+                        }
+                    }, 100);
+                }
+
+                persistSelection(isTossupValue);
+            }
+
+            function handleCheckboxChange () {
+                const values = Array.from(document.querySelectorAll(CHECKBOX_SELECTOR))
+                    .filter((input) => input.checked)
+                    .map((input) => input.value);
+
+                if (values.length === 1) {
+                    allSelectionState = 'none';
+                    applySelectionToRoom(values[0]);
+                    updateButtonLabel(values[0]);
+                    return;
+                }
+
+                allSelectionState = values.length === 2 ? 'both' : 'none';
+                applySelectionToRoom(null);
+                updateButtonLabel(null);
+            }
+
+            function loadInitialSelection () {
+                const saved = safeParse(window.localStorage.getItem(QUERY_STORAGE_KEY));
+                if (saved?.version === QUERY_VERSION && typeof saved.isTossup === 'boolean') {
+                    return selectionFromBoolean(saved.isTossup);
+                }
+                if (typeof window.room?.query?.isTossup === 'boolean') {
+                    return selectionFromBoolean(window.room.query.isTossup);
+                }
+                return null;
+            }
+
+            selection = loadInitialSelection();
+            applySelectionToRoom(selection);
+            updateButtonLabel(selection);
+
+            document.addEventListener('DOMContentLoaded', () => {
+                syncCheckboxes(selection);
+
+                document.querySelectorAll(CHECKBOX_SELECTOR).forEach((input) => {
+                    input.addEventListener('change', handleCheckboxChange);
+                });
+
+                document.getElementById(CLEAR_BUTTON_ID)?.addEventListener('click', () => {
+                    allSelectionState = 'none';
+                    applySelectionToRoom(null);
+                    syncCheckboxes(null);
+                    updateButtonLabel(null);
+                });
+
+                document.getElementById(MODAL_ID)?.addEventListener('show.bs.modal', () => {
+                    syncCheckboxes(selection);
                 });
             });
         })();
@@ -1405,6 +1627,21 @@
           }
         }
 
+        function sbMarkScoreAndAnswersCorrect() {
+          const statline = document.getElementById('statline');
+          if (statline) {
+            statline.classList.remove('text-danger');
+            statline.classList.add('text-success');
+          }
+          ['answer-display', 'user-answer'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) {
+              el.classList.remove('text-danger');
+              el.classList.add('text-success');
+            }
+          });
+        }
+
         function sbRenderPleadResult(equivalent, verdictText) {
           const content = document.getElementById('plead-result-content');
           if (!content) return;
@@ -1488,7 +1725,7 @@
             const resp = await fetch('/api/ai-help/equivalence', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ question, correctAnswer, userAnswer, category: sbGetCurrentCategory() })
+              body: JSON.stringify({ question, correctAnswer, userAnswer, category: sbGetCurrentCategory(), strictness: sbGetStrictnessValue() })
             });
             console.log('[SBAI] plead response', { ok: resp.ok, status: resp.status, ct: resp.headers.get('content-type') });
             const ct = resp.headers.get('content-type') || '';
@@ -1517,8 +1754,10 @@
                   if (player) {
                     const isTossup = room.previous?.tossup?.isTossup === true;
                     const increment = isTossup ? 4 : 10;
-                    const currentScore = (typeof player.score === 'number' && !Number.isNaN(player.score)) ? player.score : 0;
-                    player.score = currentScore + increment;
+                    const baseScore = (room.previous && typeof room.previous.scoreBeforeJudge === 'number')
+                      ? room.previous.scoreBeforeJudge
+                      : ((typeof player.score === 'number' && !Number.isNaN(player.score)) ? player.score : 0);
+                    player.score = baseScore + increment;
                     if (typeof window.updateStatDisplay === 'function') {
                       window.updateStatDisplay(player);
                     }
@@ -1557,6 +1796,7 @@
                 });
               }
               window.refreshScienceBowlSubjectStats?.();
+              sbMarkScoreAndAnswersCorrect();
             } else {
               if (btn) btn.textContent = 'Not accepted';
             }
@@ -1615,6 +1855,28 @@
           } catch (_) {}
           const checked = document.querySelector('.category-checkbox:checked');
           return checked?.id || 'Science';
+        }
+
+        function sbGetStrictnessValue() {
+          const slider = document.getElementById('set-strictness');
+          if (slider) {
+            const raw = parseInt(slider.value, 10);
+            if (!Number.isNaN(raw)) {
+              return Math.max(0, Math.min(100, raw));
+            }
+          }
+          try {
+            if (window.room && typeof room.settings?.strictness === 'number') {
+              return Math.max(0, Math.min(100, room.settings.strictness));
+            }
+          } catch (_) {}
+          return 40;
+        }
+
+        function sbNormalizeStrictnessForValidator(raw) {
+          const n = parseInt(raw, 10);
+          if (Number.isNaN(n)) { return 7; }
+          return Math.max(0, Math.min(20, Math.round(n / 5)));
         }
 
         async function sbGetAIExplanation() {
@@ -2177,11 +2439,9 @@
                     isPaused = false;
                     clearAudioReadingNotice({ unlockQuestion: true });
                 }
-                
-                // Only send the buzz message if the modern handlers are not active
-                if (legacyHandlersActive()) {
-                    window.room.message('user', { type: 'buzz' });
-                }
+
+                // Always send buzz to room so answering works in both modern and legacy flows
+                window.room.message('user', { type: 'buzz' });
             });
         }
 
@@ -2287,70 +2547,27 @@
         document.getElementById('answer-form').addEventListener('submit', function(event) {
             event.preventDefault();
             event.stopPropagation();
-            
-            if (!legacyHandlersActive()) {
-                return;
-            }
 
-            const answer = document.getElementById('answer-input').value;
+            const answerInput = document.getElementById('answer-input');
+            const answer = (answerInput?.value || '').trim();
             console.log('Answer submitted:', answer);
-            
+            if (!answer) { return; }
             if (!window.room) {
                 console.error('Room not initialized');
                 return;
             }
 
-            // Get the current question's correct answer
-            const correctAnswer = window.room.tossup?.answer;
-            console.log('Attempting to get correct answer:', {
-                correctAnswer,
-                tossup: window.room.tossup
-            });
+            // Prefer the modern flow: send give-answer to the room and let the client handle correctness/score.
+            try {
+                window.room.message('user', { type: 'give-answer', givenAnswer: answer });
+            } catch (err) {
+                console.error('Error sending give-answer message:', err);
+            }
 
-            if (!correctAnswer) {
-                console.error('No correct answer available for current question');
-                return;
-            }
-            
-            // Get the current strictness setting (default to 7 if control is absent)
-            const strictnessEl = document.getElementById('set-strictness');
-            const strictness = strictnessEl ? (parseInt(strictnessEl.value) || 7) : 7;
-            
-            // Validate the answer
-            const validationResult = validateAnswer(answer, correctAnswer, strictness);
-            console.log('Answer validation result:', validationResult);
-            
-            // If answer is correct, update the UI score (legacy fallback only)
-            if (validationResult.isCorrect) {
-                const statline = document.getElementById('statline');
-                const isTossup = window.room?.tossup?.isTossup === true;
-                const increment = isTossup ? 4 : 10;
-                const currentScore = statline ? (parseInt(statline.textContent.split(': ')[1]) || 0) : 0;
-                const newScore = currentScore + increment;
-                if (statline) {
-                    statline.textContent = `SCORE: ${newScore}`;
-                }
-            }
-            
-            // Call revealAnswer with the necessary data
-            revealAnswer({
-                type: 'reveal-answer',
-                question: window.room.questionSplit.join(' '),
-                answer: answer,
-                correctAnswer: correctAnswer
-            });
-            
             // Clear and hide input
-            document.getElementById('answer-input').value = '';
-            document.getElementById('answer-input-group').classList.add('d-none');
-            
-            // Send answer to room with validation result
-            window.room.message('user', { 
-                type: 'give-answer', 
-                givenAnswer: answer,
-                isCorrect: validationResult.isCorrect,
-                matchType: validationResult.matchType
-            });
+            if (answerInput) answerInput.value = '';
+            const group = document.getElementById('answer-input-group');
+            if (group) group.classList.add('d-none');
         });
 
         // Initialize room state (legacy only)
@@ -2835,6 +3052,7 @@
             const container = document.getElementById('subject-stats-container');
             const statsBody = document.getElementById('subject-stats-body');
             const refreshButton = document.getElementById('refresh-subject-stats');
+            const clearButton = document.getElementById('clear-subject-stats');
             const collapseButton = document.getElementById('toggle-subject-stats');
             const STATS_COLLAPSE_KEY = 'singleplayer-science-bowl-stats-collapsed';
             let statsCollapsed = window.localStorage.getItem(STATS_COLLAPSE_KEY) === 'true';
@@ -2845,11 +3063,15 @@
                 return;
             }
 
-            function setLoadingState () {
-                statsBody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Loading stats...</td></tr>';
+            function setLoadingState (message = 'Loading stats...') {
+                statsBody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">${message}</td></tr>`;
                 if (refreshButton) {
                     refreshButton.disabled = true;
                     refreshButton.textContent = 'Loading...';
+                }
+                if (clearButton) {
+                    clearButton.disabled = true;
+                    clearButton.textContent = 'Working...';
                 }
             }
 
@@ -2861,6 +3083,10 @@
                 if (refreshButton) {
                     refreshButton.disabled = false;
                     refreshButton.textContent = 'Refresh';
+                }
+                if (clearButton) {
+                    clearButton.disabled = false;
+                    clearButton.textContent = 'Clear';
                 }
             }
 
@@ -2994,7 +3220,30 @@
                 applyStatsCollapseState();
             });
 
+            async function clearSubjectStats () {
+                if (loading) { return; }
+                loading = true;
+                setLoadingState('Clearing stats...');
+                try {
+                    const resp = await fetch('/api/science-bowl/session-stats', { method: 'DELETE' });
+                    if (!resp.ok) {
+                        const text = await resp.text();
+                        throw new Error(text || `Clear failed (${resp.status})`);
+                    }
+                    window.sbSubjectStatAdjustments = {};
+                    loading = false;
+                    finishLoading();
+                    await loadSubjectStats();
+                } catch (error) {
+                    console.error('[SB Stats] Error clearing subject stats:', error);
+                    setErrorState(`Error clearing stats: ${error?.message || error}`);
+                    loading = false;
+                    finishLoading();
+                }
+            }
+
             refreshButton?.addEventListener('click', loadSubjectStats);
+            clearButton?.addEventListener('click', clearSubjectStats);
             loadSubjectStats();
 
             window.refreshScienceBowlSubjectStats = function refreshScienceBowlSubjectStats () {
@@ -3213,6 +3462,48 @@
             window.sbSyncAnswerPanels?.();
         })();
     </script>
+    <script>
+        // Lightweight helpers to keep strictness UI in sync and ensure answer box is focusable after buzzing.
+        document.addEventListener('DOMContentLoaded', () => {
+            const slider = document.getElementById('set-strictness');
+            const disp = document.getElementById('strictness-display');
+            const note = document.getElementById('strictness-note');
+            const descriptions = [
+                { max: 20, text: 'Very forgiving – take intent even with typos.' },
+                { max: 40, text: 'Forgiving – allow close paraphrases and small typos.' },
+                { max: 60, text: 'Balanced – prefers correct wording but allows obvious intent.' },
+                { max: 80, text: 'Precise – needs clear match and key qualifiers.' },
+                { max: 100, text: 'Strict – close to exact wording required.' }
+            ];
+            function updateStrictnessUI(value) {
+                if (disp) disp.textContent = value;
+                if (note) {
+                    const match = descriptions.find(d => value <= d.max) || descriptions[descriptions.length - 1];
+                    note.textContent = match.text;
+                }
+            }
+            if (slider) {
+                const current = Math.max(0, Math.min(100, parseInt(slider.value, 10) || 40));
+                updateStrictnessUI(current);
+                slider.addEventListener('input', () => {
+                    const val = Math.max(0, Math.min(100, parseInt(slider.value, 10) || 0));
+                    updateStrictnessUI(val);
+                });
+            }
+
+            // Ensure answer box is available after buzzing
+            const buzzBtn = document.getElementById('buzz');
+            const answerInputGroup = document.getElementById('answer-input-group');
+            const answerInput = document.getElementById('answer-input');
+            if (buzzBtn && answerInputGroup && answerInput) {
+                buzzBtn.addEventListener('click', () => {
+                    answerInputGroup.classList.remove('d-none');
+                    answerInput.disabled = false;
+                    answerInput.focus();
+                });
+            }
+        });
+    </script>
     
     <!-- Subject Statistics Table - Bottom Right Corner -->
     <div id="subject-stats-container">
@@ -3222,6 +3513,7 @@
                 <button class="btn btn-sm btn-outline-secondary" id="toggle-subject-stats" type="button" aria-expanded="true" title="Collapse stats">
                     <i class="bi bi-chevron-down collapse-toggle-icon"></i>
                 </button>
+                <button class="btn btn-sm btn-outline-danger" id="clear-subject-stats" type="button">Clear</button>
                 <button class="btn btn-sm btn-outline-secondary" id="refresh-subject-stats" type="button">Refresh</button>
             </div>
         </div>

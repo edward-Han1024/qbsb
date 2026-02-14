@@ -203,13 +203,16 @@ Critique JSON:\n${JSON.stringify({ needs_changes: needsChanges, issues, summary 
 // Evaluate semantic equivalence between user answer and canonical answer
 router.post('/equivalence', async (req, res) => {
   try {
-    const { question, correctAnswer, userAnswer, userJustification, category } = req.body || {};
+    const { question, correctAnswer, userAnswer, userJustification, category, strictness } = req.body || {};
+    const rawStrictness = Number.parseInt(strictness, 10);
+    const strictness0to100 = Number.isNaN(rawStrictness) ? 60 : Math.max(0, Math.min(100, rawStrictness));
     console.log('[AI-HELP] /equivalence payload', {
       qLen: (question || '').length,
       correctAnswer: String(correctAnswer).slice(0, 80),
       userAnswer: String(userAnswer).slice(0, 80),
       hasJustification: !!userJustification,
-      category
+      category,
+      strictness: strictness0to100
     });
 
     if (!correctAnswer || !userAnswer) {
@@ -228,9 +231,15 @@ Category: ${category || 'Science'}
 Canonical Answer: ${correctAnswer}
 Student Answer: ${userAnswer}
 ${userJustification ? `Student Justification (optional): ${userJustification}` : ''}
+Strictness setting (0 = very forgiving, 100 = very strict): ${strictness0to100}/100
 
 Decide if the student answer is essentially equivalent to the canonical answer.
 Adjudication rules:
+- Use the provided strictness: 0-30 => accept near-misses and typos if intent matches; 31-70 => balanced; 71-100 => require precise matches and qualifiers.
+- Be forgiving of minor spelling errors, spacing/capitalization differences, and light punctuation issues if the intent is clear.
+- Prefer accepting when the student clearly identifies the same concept even if the wording differs from the answer line (e.g., paraphrase, common nickname, or shorthand).
+- If a qualifier is missing but the student still unambiguously names the correct thing, accept unless the qualifier changes the meaning.
+- Use the student's justification to resolve borderline cases; if they describe the right idea there, lean toward equivalent.
 - Accept common synonyms, alternate phrasings, word order, plural/singular, diacritics, and minor spelling errors.
 - Accept equivalent chemistry names (IUPAC/common), biology taxonomic variants, physics/astro naming variants, and well-known aliases.
 - For numeric answers, allow rounding and equivalent forms; units must be compatible if required by the canonical answer.

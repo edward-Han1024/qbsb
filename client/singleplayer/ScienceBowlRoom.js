@@ -3,6 +3,13 @@ import QuestionRoom from '../../quizbowl/QuestionRoom.js';
 import ScienceBowlCategoryManager from '../../quizbowl/ScienceBowlCategoryManager.js';
 import { validateAnswer } from './science-bowl/answer-validator.js';
 
+function normalizeStrictnessForValidation(raw) {
+  const numeric = Number.parseInt(raw, 10);
+  if (Number.isNaN(numeric)) { return 7; }
+  // Map 0-100 slider into roughly 0-20 range expected by validator
+  return Math.max(0, Math.min(20, Math.round(numeric / 5)));
+}
+
 function normalizeScienceBowlQuestion(question) {
   if (!question || typeof question !== 'object') { return question; }
   if (typeof question.isTossup === 'boolean') { return question; }
@@ -37,7 +44,8 @@ export default class ScienceBowlRoom extends QuestionRoom {
       showHistory: true,
       typeToAnswer: true,
       timer: true,
-      strictness: 7,
+      strictness: 40,
+      strictnessNormalized: normalizeStrictnessForValidation(40),
       readingSpeed: 50
     };
 
@@ -74,6 +82,8 @@ export default class ScienceBowlRoom extends QuestionRoom {
     this.wordIndex = 0;
     this.tossupProgress = 'NOT_STARTED';
     this.aiLockout = false;
+    this.currentQuestionKey = null;
+    this.optionsReadComplete = true;
   }
 
   async message(userId, message) {
@@ -127,6 +137,7 @@ export default class ScienceBowlRoom extends QuestionRoom {
     // Clear any running timers
     clearTimeout(this.timeoutID);
     clearInterval(this.timer?.interval);
+    this.clearPendingOptionTimeouts();
     this.emitMessage({ type: 'timer-update', timeRemaining: 0 });
 
     console.log('ScienceBowlRoom: next() called');
@@ -150,12 +161,14 @@ export default class ScienceBowlRoom extends QuestionRoom {
       return;
     }
 
+    this.currentQuestionKey = question?._id || question?.id || `q-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     this.questionSplit = questionText.split(' ').filter(word => word !== '');
     this.wordIndex = 0;
     this.tossupProgress = 'READING';
     this.aiLockout = false;
     this.buzzedIn = null;
     this.buzzes = [];
+    this.optionsReadComplete = !(question?.is_mcq && Array.isArray(question?.options) && question.options.length > 0);
 
     // For Science Bowl questions, isTossup is already a boolean field
     // No need to convert from type enum
@@ -166,8 +179,24 @@ export default class ScienceBowlRoom extends QuestionRoom {
     this.emitMessage({ type: 'question', question });
     
     // Start reading the question
-    this.readQuestion(Date.now());
+    this.readQuestion(Date.now(), this.currentQuestionKey);
     return question;
+  }
+
+  clearPendingOptionTimeouts() {
+    const optionTimeoutKeys = [
+      'optionTimeout0',
+      'optionTimeout1',
+      'optionTimeout2',
+      'optionTimeout3',
+      'optionTimeoutFinal'
+    ];
+    optionTimeoutKeys.forEach((key) => {
+      if (this[key]) {
+        clearTimeout(this[key]);
+        this[key] = null;
+      }
+    });
   }
 
   getNormalizedQuestionText(question) {
@@ -207,7 +236,12 @@ export default class ScienceBowlRoom extends QuestionRoom {
     return sanitized;
   }
 
-  async readQuestion(expectedReadTime) {
+  async readQuestion(expectedReadTime, questionKey = this.currentQuestionKey) {
+    if (questionKey && questionKey !== this.currentQuestionKey) {
+      console.log('ScienceBowlRoom: Stale readQuestion invocation skipped', { questionKey, currentQuestionKey: this.currentQuestionKey });
+      return;
+    }
+
     if (!this.questionSplit || this.wordIndex >= this.questionSplit.length) {
       // Start timer when question finishes reading
       if (!this.buzzedIn) {
@@ -280,7 +314,9 @@ export default class ScienceBowlRoom extends QuestionRoom {
               
               // If this is the last option, start the timer
               if (index === this.tossup.options.length - 1) {
+                this.optionsReadComplete = true;
                 this.optionTimeoutFinal = setTimeout(() => {
+                  if (questionKey && questionKey !== this.currentQuestionKey) { return; }
                   if (!this.buzzedIn) {
                     const timerDuration = this.tossup?.isTossup ? 50 : 200;
                     this.startServerTimer(
@@ -334,8 +370,9 @@ export default class ScienceBowlRoom extends QuestionRoom {
     });
 
     this.timeoutID = setTimeout(() => {
+      if (questionKey && questionKey !== this.currentQuestionKey) { return; }
       if (!this.paused && !this.buzzedIn) {
-        this.readQuestion(time + expectedReadTime);
+        this.readQuestion(time + expectedReadTime, questionKey);
       }
     }, delay);
   }
@@ -361,8 +398,10 @@ export default class ScienceBowlRoom extends QuestionRoom {
   }
 
   setStrictness(userId, { strictness }) {
-    this.settings.strictness = strictness;
-    this.emitMessage({ type: 'set-strictness', strictness, userId });
+    const numeric = Math.max(0, Math.min(100, Number.parseInt(strictness, 10)));
+    this.settings.strictness = Number.isNaN(numeric) ? this.settings.strictness : numeric;
+    this.settings.strictnessNormalized = normalizeStrictnessForValidation(this.settings.strictness);
+    this.emitMessage({ type: 'set-strictness', strictness: this.settings.strictness, userId });
   }
 
   setReadingSpeed(userId, { readingSpeed }) {
@@ -480,18 +519,19 @@ export default class ScienceBowlRoom extends QuestionRoom {
       });
       
       // Extract the letter and full answer from the answer line
-      const answerMatch = this.tossup.answer.match(/^([A-Z])\)\s*(.+)$/);
+      const answerMatch = this.tossup.answer.match(/^([A-Za-z])\)\s*(.+)$/i);
       console.log('Answer match result:', answerMatch);
       
       if (answerMatch) {
-        const [, letter, fullAnswer] = answerMatch;
+        const [, letterRaw, fullAnswer] = answerMatch;
+        const letter = (letterRaw || '').toUpperCase();
         console.log('Extracted answer parts:', { letter, fullAnswer });
         
         // Create a combined answer string with both letter and full answer
         const combinedAnswer = `${letter} (ACCEPT: ${fullAnswer})`;
         
         // Use the validateAnswer function to check the answer
-        const validationResult = validateAnswer(givenAnswer, combinedAnswer, this.settings.strictness);
+        const validationResult = validateAnswer(givenAnswer, combinedAnswer, 7); // fixed strictness for MCQ
         isCorrect = validationResult.isCorrect;
         console.log('Final isCorrect result (MCQ):', isCorrect);
       }
@@ -500,7 +540,7 @@ export default class ScienceBowlRoom extends QuestionRoom {
         givenAnswer,
         correctAnswer: this.tossup.answer
       });
-      const validationResult = validateAnswer(givenAnswer, this.tossup.answer, this.settings.strictness);
+      const validationResult = validateAnswer(givenAnswer, this.tossup.answer, this.settings.strictnessNormalized);
       isCorrect = validationResult.isCorrect;
       console.log('Final isCorrect result (free-response):', isCorrect, validationResult);
     }
@@ -527,10 +567,11 @@ export default class ScienceBowlRoom extends QuestionRoom {
     const remainingLength = Array.isArray(this.questionSplit)
       ? this.questionSplit.slice(this.wordIndex).join(' ').length
       : 0;
+    const hasMcqOptions = this.tossup?.is_mcq && Array.isArray(this.tossup?.options) && this.tossup.options.length > 0;
     const perQuestionCelerity = totalLength > 0 ? (remainingLength / totalLength) : 0;
-    const endOfQuestion = Array.isArray(this.questionSplit)
-      ? this.wordIndex >= this.questionSplit.length
-      : true;
+    const endOfQuestion = hasMcqOptions
+      ? this.optionsReadComplete
+      : (Array.isArray(this.questionSplit) ? this.wordIndex >= this.questionSplit.length : true);
 
     // Store the result in previous
     this.previous = {

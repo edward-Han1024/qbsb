@@ -50,10 +50,10 @@ export async function getRandomQuestions(query) {
     matchStage.is_mcq = isMcq;
   }
   
-  // Only apply is_tossup filter if other filters are present
-  // if (isTossup !== undefined && Object.keys(matchStage).length > 0) {
-  //   matchStage.is_tossup = isTossup;
-  // }
+  // Filter by question type (tossup vs bonus) when specified
+  if (isTossup !== undefined) {
+    matchStage.is_tossup = isTossup;
+  }
 
   console.log('getRandomQuestions: Final match stage:', JSON.stringify(matchStage, null, 2));
 
