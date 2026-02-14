@@ -94,6 +94,35 @@ if (savedCategoryState.version === queryVersion) {
 const aiBot = new AIBot(room);
 aiBot.setAIBot(aiBots['average-high-school'][0]);
 aiBot.active = false;
+let lastAiScoredTossupId = null;
+const AI_OPPONENTS = {
+  none: { label: 'No opponent', bot: null, username: 'AI' },
+  beginner: { label: 'Beginner AI', bot: aiBots['ai-buzz-beginner']?.[0], username: 'AI (Beginner)' },
+  advanced: { label: 'Advanced AI', bot: aiBots['ai-buzz-advanced']?.[0], username: 'AI (Advanced)' }
+};
+
+function applyAiOpponentChoice (choice, { persist = true } = {}) {
+  const selected = Object.prototype.hasOwnProperty.call(AI_OPPONENTS, choice) ? choice : 'none';
+  const config = AI_OPPONENTS[selected];
+  console.debug('[AI-BUZZ][ui] applyAiOpponentChoice', { selected, hasBot: Boolean(config.bot) });
+  room.settings.aiOpponent = selected;
+  if (config.bot) {
+    aiBot.setAIBot(config.bot);
+  }
+  aiBot.player.username = config.username || 'AI';
+  room.message(USER_ID, { type: 'toggle-ai-mode', aiMode: selected !== 'none' });
+  const select = document.getElementById('ai-opponent-select');
+  if (select && select.value !== selected) {
+    select.value = selected;
+  }
+  if (persist) {
+    window.localStorage.setItem('singleplayer-science-bowl-settings', JSON.stringify({
+      ...room.settings,
+      aiOpponent: selected,
+      version: settingsVersion
+    }));
+  }
+}
 
 const socket = {
   send: onmessage,
@@ -172,7 +201,7 @@ function endOfSet () {
   window.alert('You have reached the end of the set');
 }
 
-async function giveAnswer ({ directive, directedPrompt, perQuestionCelerity, score, tossup, userId, isCorrect }) {
+async function giveAnswer ({ directive, directedPrompt, perQuestionCelerity, score, tossup, userId, isCorrect, givenAnswer }) {
   if (directive === 'prompt') {
     document.getElementById('answer-input-group').classList.remove('d-none');
     document.getElementById('answer-input').focus();
@@ -195,7 +224,36 @@ async function giveAnswer ({ directive, directedPrompt, perQuestionCelerity, sco
 
     updateStatDisplay(player);
   } else if (aiBot.active) {
-    upsertPlayerItem(aiBot.player);
+    const aiAnswerPanel = document.getElementById('ai-answer-panel');
+    const aiAnswerDisplay = document.getElementById('ai-answer-display');
+    if (aiAnswerPanel && aiAnswerDisplay) {
+      aiAnswerPanel.classList.remove('d-none');
+      aiAnswerDisplay.textContent = `AI ANSWER: ${givenAnswer || ''}`;
+    }
+    const aiTossupId = tossup?._id || room?.tossup?._id || room?.previous?.tossup?._id || null;
+    if (aiTossupId && lastAiScoredTossupId === aiTossupId) {
+      console.debug('[AI-BUZZ][ui] skip duplicate AI score', { aiTossupId });
+      return;
+    }
+    const aiPlayer = aiBot.player;
+    const isTossup = tossup?.isTossup === true;
+    const pointsForQuestion = isTossup ? 4 : 10;
+    const buzzedDuringReading = isTossup && typeof perQuestionCelerity === 'number' && perQuestionCelerity > 0;
+    aiPlayer.points = Number.isFinite(aiPlayer.points) ? aiPlayer.points : 0;
+    aiPlayer.tuh = Number.isFinite(aiPlayer.tuh) ? aiPlayer.tuh : 0;
+    if (isCorrect) {
+      aiPlayer.points += pointsForQuestion;
+      aiPlayer.tens = (aiPlayer.tens ?? 0) + 1;
+    } else if (buzzedDuringReading) {
+      aiPlayer.points -= 4;
+      aiPlayer.negs = (aiPlayer.negs ?? 0) + 1;
+    }
+    aiPlayer.tuh += 1;
+    upsertPlayerItem(aiPlayer);
+    if (aiTossupId) {
+      lastAiScoredTossupId = aiTossupId;
+    }
+    return;
   }
 
   document.getElementById('answer-input').value = '';
@@ -342,8 +400,8 @@ function pause ({ paused }) {
   }
 }
 
-function revealAnswer ({ answer, question, correctAnswer, isCorrect }) {
-  console.log('revealAnswer called with:', { answer, question, correctAnswer, isCorrect });
+function revealAnswer ({ answer, question, correctAnswer, isCorrect, userId }) {
+  console.log('revealAnswer called with:', { answer, question, correctAnswer, isCorrect, userId });
   
   const elements = {
     question: document.getElementById('question'),
@@ -387,7 +445,12 @@ function revealAnswer ({ answer, question, correctAnswer, isCorrect }) {
 
   if (elements.userAnswer) {
     console.log('Setting user answer content');
-    elements.userAnswer.innerHTML = 'YOUR ANSWER: ' + answer;
+    const isAi = typeof userId === 'string' && userId.startsWith('ai');
+    if (!isAi) {
+      elements.userAnswer.innerHTML = 'YOUR ANSWER: ' + answer;
+    } else {
+      elements.userAnswer.innerHTML = '';
+    }
   }
 
   console.log('Current display content:', {
@@ -406,10 +469,24 @@ function revealAnswer ({ answer, question, correctAnswer, isCorrect }) {
     elements.start.textContent = 'Next';
   }
   if (elements.toggleCorrect) {
-    elements.toggleCorrect.classList.remove('d-none');
-    // Use the isCorrect flag if provided, otherwise fall back to room.previous.isCorrect
-    const wasCorrect = isCorrect !== undefined ? isCorrect : room.previous.isCorrect;
-    elements.toggleCorrect.textContent = wasCorrect ? 'I was wrong' : 'I was right';
+    const isAi = typeof userId === 'string' && userId.startsWith('ai');
+    if (isAi) {
+      elements.toggleCorrect.classList.add('d-none');
+    } else {
+      elements.toggleCorrect.classList.remove('d-none');
+      // Use the isCorrect flag if provided, otherwise fall back to room.previous.isCorrect
+      const wasCorrect = isCorrect !== undefined ? isCorrect : room.previous.isCorrect;
+      elements.toggleCorrect.textContent = wasCorrect ? 'I was wrong' : 'I was right';
+    }
+  }
+  const aiAnswerPanel = document.getElementById('ai-answer-panel');
+  const aiAnswerDisplay = document.getElementById('ai-answer-display');
+  const isAi = typeof userId === 'string' && userId.startsWith('ai');
+  if (aiAnswerPanel && isAi) {
+    aiAnswerPanel.classList.remove('d-none');
+    if (aiAnswerDisplay) {
+      aiAnswerDisplay.textContent = `AI ANSWER: ${answer || ''}`;
+    }
   }
   
   // Show AI help section when answer is revealed
@@ -476,6 +553,7 @@ function setYearRange ({ minYear, maxYear }) {
 }
 
 function toggleAiMode ({ aiMode }) {
+  console.debug('[AI-BUZZ][ui] toggleAiMode', { aiMode });
   if (aiMode) { upsertPlayerItem(aiBot.player); }
 
   aiBot.active = aiMode;
@@ -483,7 +561,11 @@ function toggleAiMode ({ aiMode }) {
   const aiToggle = document.getElementById('toggle-ai-mode'); if (aiToggle) aiToggle.checked = aiMode;
   document.getElementById('player-list-group').classList.toggle('d-none', !aiMode);
   document.getElementById('player-list-group-hr').classList.toggle('d-none', !aiMode);
-  window.localStorage.setItem('singleplayer-science-bowl-settings', JSON.stringify({ ...room.settings, version: settingsVersion }));
+  window.localStorage.setItem('singleplayer-science-bowl-settings', JSON.stringify({
+    ...room.settings,
+    aiOpponent: room.settings.aiOpponent || 'none',
+    version: settingsVersion
+  }));
 }
 
 function toggleCorrect ({ correct, userId }) {
@@ -592,6 +674,9 @@ function updateQuestion ({ word }) {
   }
 
   syncQuestionDisplayFromBuffer();
+  if (aiBot.active) {
+    console.debug('[AI-BUZZ][ui] updateQuestion', { word });
+  }
   
   // Don't show AI help section here - wait until answer is revealed
   // console.log('updateQuestion called - NOT showing AI help yet');
@@ -687,6 +772,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const elStrictDisp = document.getElementById('strictness-display'); if (elStrictDisp) elStrictDisp.textContent = room.settings.strictness;
       const elSpeed = document.getElementById('reading-speed'); if (elSpeed) elSpeed.value = room.settings.readingSpeed;
       const elSpeedDisp = document.getElementById('reading-speed-display'); if (elSpeedDisp) elSpeedDisp.textContent = room.settings.readingSpeed;
+      const aiSelect = document.getElementById('ai-opponent-select');
+      if (aiSelect) {
+        const savedOpponent = room.settings.aiOpponent || 'none';
+        aiSelect.value = savedOpponent;
+        applyAiOpponentChoice(savedOpponent, { persist: false });
+      }
     }
   }
 
@@ -767,6 +858,13 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('buzz').addEventListener('click', () => {
     room.message(USER_ID, { type: 'buzz' });
   });
+
+  const aiOpponentSelect = document.getElementById('ai-opponent-select');
+  if (aiOpponentSelect) {
+    aiOpponentSelect.addEventListener('change', (e) => {
+      applyAiOpponentChoice(e.target.value);
+    });
+  }
 
   const clearStatsButton = document.getElementById('clear-stats');
   if (clearStatsButton) {

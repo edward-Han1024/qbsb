@@ -1,12 +1,62 @@
 import { Router } from 'express';
+import fs from 'fs';
+import path from 'path';
 import { scienceBowl } from '../../database/databases.js';
 import { upsertBuzzpoints, normalizeScienceBowlQuestionText, BUZZ_PROMPT_VERSION } from '../../server/ai/buzzpoint-service.js';
 import { ObjectId } from 'mongodb';
 
 const router = Router();
+const JSONL_PATH = process.env.AI_BUZZ_JSONL_PATH || path.resolve(process.cwd(), 'ai-buzzpoints.jsonl');
+let JSONL_CACHE = null;
+let JSONL_CACHE_STATS = null;
+
+function normalizeQuestionId(id) {
+  if (id === null || id === undefined) return null;
+  if (typeof id === 'string' || typeof id === 'number') return String(id);
+  if (typeof id?.toHexString === 'function') return id.toHexString();
+  if (typeof id?.toString === 'function') {
+    const str = id.toString();
+    if (str && str !== '[object Object]') return str;
+  }
+  if (typeof id?.$oid === 'string') return id.$oid;
+  return null;
+}
+
+function loadJsonlCache() {
+  if (JSONL_CACHE) return JSONL_CACHE;
+  const cache = new Map();
+  let parsed = 0;
+  let skipped = 0;
+  if (!fs.existsSync(JSONL_PATH)) {
+    JSONL_CACHE = cache;
+    JSONL_CACHE_STATS = { parsed, skipped, path: JSONL_PATH, missing: true };
+    return JSONL_CACHE;
+  }
+  const raw = fs.readFileSync(JSONL_PATH, 'utf8');
+  const lines = raw.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      const doc = JSON.parse(trimmed);
+      const key = normalizeQuestionId(doc?.questionId);
+      if (!key) {
+        skipped++;
+        continue;
+      }
+      cache.set(key, doc);
+      parsed++;
+    } catch {
+      skipped++;
+    }
+  }
+  JSONL_CACHE = cache;
+  JSONL_CACHE_STATS = { parsed, skipped, path: JSONL_PATH, missing: false };
+  return JSONL_CACHE;
+}
 
 router.get('/health/version', (_req, res) => {
-  res.json({ ok: true, promptVersion: BUZZ_PROMPT_VERSION });
+  res.json({ ok: true, promptVersion: BUZZ_PROMPT_VERSION, source: 'jsonl', jsonlPath: JSONL_PATH });
 });
 
 function buildLookupFilter(id) {
@@ -30,13 +80,14 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const level = (req.query.level || '').toString().toLowerCase();
-    const filter = buildLookupFilter(id);
-    if (!filter) {
+    const normalizedId = normalizeQuestionId(id);
+    if (!normalizedId) {
       return res.status(400).json({ error: 'Invalid question id' });
     }
 
-    const collection = scienceBowl.collection('ai_buzzpoints');
-    const doc = await collection.findOne(filter);
+    const cache = loadJsonlCache();
+    const doc = cache.get(normalizedId);
+    console.log('[AI-BUZZ][JSONL] lookup', { id: normalizedId, hit: Boolean(doc) });
     if (!doc) {
       return res.status(404).json({ error: 'No buzzpoint record found for question' });
     }

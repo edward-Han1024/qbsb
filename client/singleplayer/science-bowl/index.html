@@ -294,7 +294,15 @@
                         <button class="btn btn-outline-primary" id="competition-select-button" data-bs-target="#competition-modal"
                             data-bs-toggle="modal" type="button">Competitions</button>
                     </div>
-                    <!-- AI mode toggle removed -->
+                    <div class="mb-3">
+                        <label class="form-label" for="ai-opponent-select">AI Opponent</label>
+                        <select class="form-select" id="ai-opponent-select">
+                            <option value="none" selected>No opponent</option>
+                            <option value="beginner">Beginner AI</option>
+                            <option value="advanced">Advanced AI</option>
+                        </select>
+                        <div class="form-text">AI will buzz and answer automatically. You can only buzz after an AI miss.</div>
+                    </div>
                     <hr>
                     <!-- Removed: Type to answer, Allow rebuzzes, Show question history, Enable timer -->
                     <div class="form-check form-switch mb-2">
@@ -324,6 +332,9 @@
                     <div class="d-flex flex-wrap align-items-center gap-2 mb-3" id="question-topbar">
                         <div class="score-panel">
                             <span id="statline">SCORE: 0</span>
+                        </div>
+                        <div class="score-panel d-none" id="ai-answer-panel">
+                            <span id="ai-answer-display">AI ANSWER: </span>
                         </div>
                         <div class="ms-auto d-flex flex-wrap gap-2" id="buttons">
                             <button class="btn btn-primary" id="start" data-bs-toggle="tooltip" data-bs-placement="top"
@@ -851,6 +862,52 @@
     <script type="module" src="/bootstrap/bootstrap.bundle.min.js"></script>
     <script type="module" src="/script.js"></script>
     <script type="module" src="index.min.js"></script>
+    <script>
+        (function setupAiOpponentDropdown() {
+            const LOG_PREFIX = '[AI-BUZZ][ui]';
+
+            function log(...args) {
+                console.log(LOG_PREFIX, ...args);
+            }
+
+            function applyChoice(choice) {
+                log('dropdown-change', { choice });
+                try {
+                    const room = window.room;
+                    if (!room) {
+                        log('no-room');
+                        return;
+                    }
+                    room.settings = room.settings || {};
+                    room.settings.aiOpponent = choice;
+                    const enableAi = choice !== 'none';
+                    room.message && room.message('user', { type: 'toggle-ai-mode', aiMode: enableAi });
+                    const stored = { ...(room.settings || {}), aiOpponent: choice, version: '2024-10-16' };
+                    window.localStorage.setItem('singleplayer-science-bowl-settings', JSON.stringify(stored));
+                } catch (err) {
+                    console.error(LOG_PREFIX, 'applyChoice failed', err);
+                }
+            }
+
+            function init() {
+                const select = document.getElementById('ai-opponent-select');
+                if (!select) {
+                    log('select-not-found');
+                    return;
+                }
+                log('select-found');
+                select.addEventListener('change', (e) => {
+                    applyChoice(e.target.value);
+                });
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', init);
+            } else {
+                init();
+            }
+        })();
+    </script>
     <script>
         (function setupScienceBowlMsCategories () {
             const CATEGORY_VERSION = '2025-05-07';
