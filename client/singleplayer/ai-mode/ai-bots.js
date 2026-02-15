@@ -172,7 +172,7 @@ const sanitizeQuestionLength = (tossup) => {
   return getEmissionLength(tossup);
 };
 
-const buildBuzzpointBot = (level, fallback = averageHighSchool) => async ({ packetLength, oldTossup, tossup }) => {
+const buildBuzzpointBot = (level, fallback = averageHighSchool, options = {}) => async ({ packetLength, oldTossup, tossup }) => {
   const questionId = tossup?._id ?? tossup?.questionId ?? tossup?.id;
   console.debug('[AI-BUZZ][bot] buildBuzzpointBot', { level, questionId });
   const prediction = await fetchBuzzpoints({ questionId, level });
@@ -183,9 +183,59 @@ const buildBuzzpointBot = (level, fallback = averageHighSchool) => async ({ pack
 
   const questionLength = sanitizeQuestionLength(tossup);
   const mapped = mapBuzzpointToEmissionIndex(tossup, prediction.wordIndex, prediction.phrase);
-  const buzzpoint = Math.min(Math.max(1, mapped), questionLength);
+  const delayWords = Number.isFinite(options?.delayWords) ? Math.max(0, Math.floor(options.delayWords)) : 0;
+  const buzzpoint = Math.min(Math.max(1, mapped + delayWords), questionLength);
   const correctBuzz = Math.random() < prediction.probCorrect;
-  console.debug('[AI-BUZZ][bot] prediction', { level, buzzpoint, probCorrect: prediction.probCorrect, correctBuzz, mapped, phrase: prediction.phrase });
+  console.debug('[AI-BUZZ][bot] prediction', { level, buzzpoint, probCorrect: prediction.probCorrect, correctBuzz, mapped, delayWords, phrase: prediction.phrase });
+  return { buzzpoint, correctBuzz };
+};
+
+const intermediateBuzzpointBot = async ({ packetLength, oldTossup, tossup }) => {
+  const questionId = tossup?._id ?? tossup?.questionId ?? tossup?.id;
+  const questionLength = sanitizeQuestionLength(tossup);
+  const intermediateDelayWords = 3;
+  if (!questionId) {
+    return averageHighSchool({ packetLength, oldTossup, tossup });
+  }
+
+  const [beginnerPrediction, advancedPrediction] = await Promise.all([
+    fetchBuzzpoints({ questionId, level: 'beginner' }),
+    fetchBuzzpoints({ questionId, level: 'advanced' })
+  ]);
+
+  if (!beginnerPrediction && !advancedPrediction) {
+    return averageHighSchool({ packetLength, oldTossup, tossup });
+  }
+
+  const beginnerMapped = beginnerPrediction
+    ? mapBuzzpointToEmissionIndex(tossup, beginnerPrediction.wordIndex, beginnerPrediction.phrase)
+    : null;
+  const advancedMapped = advancedPrediction
+    ? mapBuzzpointToEmissionIndex(tossup, advancedPrediction.wordIndex, advancedPrediction.phrase) + 2
+    : null;
+  const mappedValues = [beginnerMapped, advancedMapped].filter((value) => Number.isFinite(value));
+  const averageMapped = mappedValues.length > 0
+    ? Math.round(mappedValues.reduce((sum, value) => sum + value, 0) / mappedValues.length)
+    : 1;
+  const buzzpoint = Math.min(Math.max(1, averageMapped + intermediateDelayWords), questionLength);
+
+  const beginnerProb = Number.isFinite(beginnerPrediction?.probCorrect) ? beginnerPrediction.probCorrect : null;
+  const advancedProb = Number.isFinite(advancedPrediction?.probCorrect) ? advancedPrediction.probCorrect : null;
+  const probValues = [beginnerProb, advancedProb].filter((value) => Number.isFinite(value));
+  const blendedProb = probValues.length > 0
+    ? probValues.reduce((sum, value) => sum + value, 0) / probValues.length
+    : 0.6;
+  const correctBuzz = Math.random() < blendedProb;
+
+  console.debug('[AI-BUZZ][bot] intermediate prediction', {
+    questionId,
+    buzzpoint,
+    beginnerMapped,
+    advancedMapped,
+    intermediateDelayWords,
+    blendedProb,
+    correctBuzz
+  });
   return { buzzpoint, correctBuzz };
 };
 
@@ -201,7 +251,8 @@ const aiBots = {
   'right-after-power': [rightAfterPower, 'Buzz right after the power mark'],
   'buzz-randomly': [buzzRandomly, 'Buzz at a random point in the question (50% chance of being correct)'],
   'ai-buzz-beginner': [buildBuzzpointBot('beginner'), 'Uses AI-precomputed buzzpoints (beginner)'],
-  'ai-buzz-advanced': [buildBuzzpointBot('advanced'), 'Uses AI-precomputed buzzpoints (advanced)']
+  'ai-buzz-intermediate': [intermediateBuzzpointBot, 'Averages beginner and advanced AI buzzpoints'],
+  'ai-buzz-advanced': [buildBuzzpointBot('advanced', averageHighSchool, { delayWords: 2 }), 'Uses AI-precomputed buzzpoints (advanced, slightly delayed)']
 };
 
 loadAiBots(aiBots);

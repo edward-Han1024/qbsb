@@ -288,6 +288,32 @@
                     <input class="form-control my-1" id="packet-number" type="text" placeholder="Packet Numbers">
                 </div>
                 <div class="mt-2" id="general-settings">
+                    <div class="mb-3">
+                        <label class="form-label">Question Type</label>
+                        <div class="dropdown w-100">
+                            <button class="btn btn-outline-secondary dropdown-toggle w-100 d-flex justify-content-between align-items-center"
+                                id="question-type-dropdown-button" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <span id="question-type-dropdown-label">All Questions</span>
+                            </button>
+                            <ul class="dropdown-menu w-100" aria-labelledby="question-type-dropdown-button">
+                                <li>
+                                    <button class="dropdown-item question-type-option" type="button" data-question-type="all">
+                                        All Questions
+                                    </button>
+                                </li>
+                                <li>
+                                    <button class="dropdown-item question-type-option" type="button" data-question-type="tossup">
+                                        Tossups
+                                    </button>
+                                </li>
+                                <li>
+                                    <button class="dropdown-item question-type-option" type="button" data-question-type="bonus">
+                                        Bonuses
+                                    </button>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
                     <div class="text-center mb-2 d-flex flex-wrap justify-content-center gap-2">
                         <button class="btn btn-success" id="category-select-button" data-bs-target="#category-modal-root"
                             data-bs-toggle="modal" type="button">Categories</button>
@@ -295,13 +321,13 @@
                             data-bs-toggle="modal" type="button">Competitions</button>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label" for="ai-opponent-select">AI Opponent</label>
+                        <label class="form-label" for="ai-opponent-select">AI Opponent (Experimental)</label>
                         <select class="form-select" id="ai-opponent-select">
                             <option value="none" selected>No opponent</option>
                             <option value="beginner">Beginner AI</option>
+                            <option value="intermediate">Intermediate AI</option>
                             <option value="advanced">Advanced AI</option>
                         </select>
-                        <div class="form-text">AI will buzz and answer automatically. You can only buzz after an AI miss.</div>
                     </div>
                     <hr>
                     <!-- Removed: Type to answer, Allow rebuzzes, Show question history, Enable timer -->
@@ -1248,9 +1274,10 @@
             const QUERY_STORAGE_KEY = 'singleplayer-science-bowl-query';
             const QUERY_VERSION = '2025-05-07';
             const CHECKBOX_SELECTOR = '.question-type-checkbox';
+            const DROPDOWN_OPTION_SELECTOR = '.question-type-option';
+            const DROPDOWN_LABEL_ID = 'question-type-dropdown-label';
             const CLEAR_BUTTON_ID = 'clear-question-type-selection';
             const MODAL_ID = 'question-type-modal';
-            const BUTTON_ID = 'question-type-button';
 
             let selection = null;
             let allSelectionState = 'none';
@@ -1288,18 +1315,18 @@
                 }
             }
 
-            function updateButtonLabel (currentSelection = selection) {
-                const button = document.getElementById(BUTTON_ID);
-                if (!button) { return; }
+            function updateSelectionLabel (currentSelection = selection) {
+                const label = document.getElementById(DROPDOWN_LABEL_ID);
+                if (!label) { return; }
                 if (currentSelection === 'tossup') {
-                    button.textContent = 'Question Type: Tossups';
+                    label.textContent = 'Tossups';
                     return;
                 }
                 if (currentSelection === 'bonus') {
-                    button.textContent = 'Question Type: Bonuses';
+                    label.textContent = 'Bonuses';
                     return;
                 }
-                button.textContent = 'Question Type';
+                label.textContent = 'All Questions';
             }
 
             function syncCheckboxes (currentSelection = selection) {
@@ -1352,13 +1379,13 @@
                 if (values.length === 1) {
                     allSelectionState = 'none';
                     applySelectionToRoom(values[0]);
-                    updateButtonLabel(values[0]);
+                    updateSelectionLabel(values[0]);
                     return;
                 }
 
                 allSelectionState = values.length === 2 ? 'both' : 'none';
                 applySelectionToRoom(null);
-                updateButtonLabel(null);
+                updateSelectionLabel(null);
             }
 
             function loadInitialSelection () {
@@ -1374,7 +1401,7 @@
 
             selection = loadInitialSelection();
             applySelectionToRoom(selection);
-            updateButtonLabel(selection);
+            updateSelectionLabel(selection);
 
             document.addEventListener('DOMContentLoaded', () => {
                 syncCheckboxes(selection);
@@ -1383,11 +1410,28 @@
                     input.addEventListener('change', handleCheckboxChange);
                 });
 
+                document.querySelectorAll(DROPDOWN_OPTION_SELECTOR).forEach((option) => {
+                    option.addEventListener('click', (event) => {
+                        const nextSelection = event.currentTarget?.getAttribute('data-question-type');
+                        if (nextSelection === 'tossup' || nextSelection === 'bonus') {
+                            allSelectionState = 'none';
+                            applySelectionToRoom(nextSelection);
+                            syncCheckboxes(nextSelection);
+                            updateSelectionLabel(nextSelection);
+                            return;
+                        }
+                        allSelectionState = 'none';
+                        applySelectionToRoom(null);
+                        syncCheckboxes(null);
+                        updateSelectionLabel(null);
+                    });
+                });
+
                 document.getElementById(CLEAR_BUTTON_ID)?.addEventListener('click', () => {
                     allSelectionState = 'none';
                     applySelectionToRoom(null);
                     syncCheckboxes(null);
-                    updateButtonLabel(null);
+                    updateSelectionLabel(null);
                 });
 
                 document.getElementById(MODAL_ID)?.addEventListener('show.bs.modal', () => {

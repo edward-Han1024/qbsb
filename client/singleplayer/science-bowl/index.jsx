@@ -114,8 +114,43 @@ let lastAiScoredTossupId = null;
 const AI_OPPONENTS = {
   none: { label: 'No opponent', bot: null, username: 'AI' },
   beginner: { label: 'Beginner AI', bot: aiBots['ai-buzz-beginner']?.[0], username: 'AI (Beginner)' },
+  intermediate: { label: 'Intermediate AI', bot: aiBots['ai-buzz-intermediate']?.[0], username: 'AI (Intermediate)' },
   advanced: { label: 'Advanced AI', bot: aiBots['ai-buzz-advanced']?.[0], username: 'AI (Advanced)' }
 };
+
+const QUESTION_TYPE_FILTER_LABELS = {
+  all: 'All Questions',
+  tossup: 'Tossups',
+  bonus: 'Bonuses'
+};
+
+function normalizeQuestionTypeFilter (questionType) {
+  if (questionType === 'tossup' || questionType === 'bonus') {
+    return questionType;
+  }
+  return 'all';
+}
+
+function deriveQuestionTypeFromQuery () {
+  if (room.query?.isTossup === true) { return 'tossup'; }
+  if (room.query?.isTossup === false) { return 'bonus'; }
+  return 'all';
+}
+
+function applyQuestionTypeFilter (questionType, { persist = true } = {}) {
+  const normalizedType = normalizeQuestionTypeFilter(questionType);
+  room.query.isTossup = normalizedType === 'all' ? undefined : normalizedType === 'tossup';
+
+  const dropdownLabel = document.getElementById('question-type-dropdown-label');
+  if (dropdownLabel) {
+    dropdownLabel.textContent = QUESTION_TYPE_FILTER_LABELS[normalizedType];
+  }
+
+  if (persist) {
+    window.localStorage.setItem('singleplayer-science-bowl-query', JSON.stringify({ ...room.query, version: queryVersion }));
+  }
+  invalidateCachedQuestions('question-type-filter-updated');
+}
 
 function applyAiOpponentChoice (choice, { persist = true } = {}) {
   const selected = Object.prototype.hasOwnProperty.call(AI_OPPONENTS, choice) ? choice : 'none';
@@ -616,6 +651,7 @@ function setMode ({ mode, setName }) {
   document.getElementById('toggle-powermark-only').disabled = mode === 'local packet';
   document.getElementById('toggle-standard-only').disabled = mode === 'local packet';
   document.getElementById('category-select-button').disabled = mode === 'local packet';
+  document.getElementById('question-type-dropdown-button').disabled = mode === 'local packet';
   const aiSettingsBtn2 = document.getElementById('ai-settings'); if (aiSettingsBtn2) aiSettingsBtn2.disabled = mode === 'local packet' || !room.settings.aiMode;
   const aiToggle2 = document.getElementById('toggle-ai-mode'); if (aiToggle2) aiToggle2.disabled = mode === 'local packet';
   const clearStatsBtn = document.getElementById('clear-stats'); if (clearStatsBtn) clearStatsBtn.disabled = mode === 'local packet';
@@ -842,6 +878,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('year-range-a').textContent = room.query.minYear;
     document.getElementById('year-range-b').textContent = room.query.maxYear;
   }
+  applyQuestionTypeFilter(deriveQuestionTypeFromQuery(), { persist: false });
 
   // Initialize UI components immediately
   console.log('Setting up event handlers immediately');
@@ -897,6 +934,13 @@ document.addEventListener('DOMContentLoaded', () => {
       applyAiOpponentChoice(e.target.value);
     });
   }
+
+  document.querySelectorAll('.question-type-option').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      const questionType = event.currentTarget?.getAttribute('data-question-type');
+      applyQuestionTypeFilter(questionType);
+    });
+  });
 
   const clearStatsButton = document.getElementById('clear-stats');
   if (clearStatsButton) {
